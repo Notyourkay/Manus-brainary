@@ -28,9 +28,9 @@ describe("generated plan execution", () => {
     const bundle = parseBundle(JSON.stringify(fixture), []);
     const agent = scriptedRunner(["要求 A、B", passed, "最终答案", passed]);
     const progress: StepRecord[] = [];
-    const result = await executeBundle(task, bundle, agent.run, (step) =>
-      progress.push(step),
-    );
+    const result = await executeBundle(task, bundle, agent.run, (step) => {
+      progress.push(step);
+    });
     expect(result.status).toBe("completed");
     expect(result.finalOutput).toBe("最终答案");
     expect(agent.calls[0].definition).toEqual(bundle.agents[0]);

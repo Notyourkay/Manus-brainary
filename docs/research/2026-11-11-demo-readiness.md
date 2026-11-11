@@ -1,7 +1,7 @@
 # Manus Demo 开发决策与接入记录
 
 更新日期：2026-11-11，Asia/Shanghai。
-当前阶段：设计与代码骨架；首版任务输入方案已确定为 Brainary TUI 前台 `ask`。
+当前阶段：第一阶段开发与自测完成，等待人工验收；本文保留前期接入证据。最新验证见 `docs/research/2026-11-11-phase-1-verification.md`。
 当前架构以 `docs/design/manus-demo-v1.md` 为准，实施计划见 `docs/plans/manus-demo-v1.md`。
 
 ## 已确定的范围

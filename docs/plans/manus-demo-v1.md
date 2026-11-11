@@ -1,146 +1,140 @@
-# Manus Demo V1 实施计划
+# Manus Demo V1 实施计划与验收契约
 
-日期：2026-11-11  
-设计依据：`docs/design/manus-demo-v1.md`  
-目标：在 Brainary TUI 中运行 `manus.poa`，生成任务 Agent 与执行方法，执行并展示结果，自动形成可复用的任务 PoA 与完整轨迹。第一阶段包含本计划任务 1—5，全部完成后停止，交用户人工验收。
+日期：2026-11-11
+设计依据：`docs/design/manus-demo-v1.md`
+状态：任务 1—5 的开发与自测完成，人工验收待用户执行；第二阶段未开始。
+
+第一阶段目标：在 TUI 运行 Manus，输入自然语言，自动生成完整任务 PoA 与 Agent 定义，执行并保存结果和轨迹，在新的 Brainary 会话中直接复用任务包。
 
 ## 开发约定
 
-- 在本仓库工作，遵循 `AGENTS.md`。
-- 使用 Brainary、PoA SDK、WM SDK `0.2.0-rc`；依赖安装使用现有锁文件。
-- 沿用 TypeScript、Vitest、Biome、Rolldown 和模板打包脚本。
-- 外部数据在进入系统时校验，模块之间使用 `contracts.ts` 的类型。
-- 每次交付一个可验证结果；完成后更新本计划中的状态与证据。
-- 实际 SDK 缺陷记录最小复现并提交给对应负责人，不在应用层重做 SDK。
+- 遵循 `AGENTS.md`，使用 Brainary、PoA SDK、WM SDK `0.2.0-rc`。
+- 沿用 TypeScript、Vitest、Biome、Rolldown 和模板打包依赖。
+- 外部数据在入口校验，模块间传递契约类型。
+- 任务 1—5 属于同一个第一阶段，开发完成后停下来交由用户验收。
+- 人工操作手册统一在 `docs/acceptance/phase-1.md`，开发证据在 `docs/research/2026-11-11-phase-1-verification.md`。
 
-## 任务 1：建立可构建的生成与执行骨架
+## 任务 1：工程与执行契约
 
-状态：源码完成，静态检查、自动测试与打包完成；真实模型运行列入任务 2。
+范围：`src/contracts.ts`、`bundle.ts`、`execution.ts`，模板配置与测试。
 
-涉及文件：
+输入/输出：`parseBundle(raw, availableTools)` 将模型回复变为 `GeneratedBundle`；`executeBundle(task, bundle, runAgent, onStep, trace)` 按生成方案返回 `ExecutionResult`。
 
-- `src/main.ts`、`input.ts`、`config.ts`：启动、输入、环境。
-- `src/contracts.ts`、`bundle.ts`：产物契约和唯一模型数据入口。
-- `src/generator.ts`、`execution.ts`、`agent.ts`：生成、执行和 SDK 生命周期。
-- 模板配置、`scripts/`、`manifest.toml`：构建与分发。
-- `tests/bundle.test.ts`、`tests/execution.test.ts`：入口和执行语义验证。
-
-接口：
-
-```ts
-readTask(): Promise<TaskRequest>
-createAgentRunner(config: ManusConfig): AgentRunner
-generateBundle(task: TaskRequest, config: ManusConfig, runAgent: AgentRunner): Promise<GeneratedBundle>
-parseBundle(raw: string, availableTools: readonly BrainaryTool[]): GeneratedBundle
-executeBundle(task: TaskRequest, bundle: GeneratedBundle, runAgent: AgentRunner,
-  onStep: (record: StepRecord) => void): Promise<ExecutionResult>
-```
-
-- [x] 继承模板工具链，输出名改为 `dist/manus.poa`。
-- [x] 建立 Agent 定义、执行方案和运行实例 ID 的独立表达。
-- [x] 生成结果经过 JSON、结构和引用检查后交给执行器。
-- [x] 按生成顺序执行，通过 `inputFrom` 传递上游结果。
-- [x] 按生成条件检查，遵循每步 `maxRevisions`，失败后停止下游。
-- [x] 运行 `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm package`。
-- [x] 使用 rc Runtime 加载产物，确认程序到达输入入口。
-
-测试关注的真实行为：生成方案变化后调用角色变化；下游收到上游实际结果；修订消息包含检查反馈；失败时后续步骤不被调用。模型返回值使用固定脚本，仅替换模型调用边界。
+- [x] 继承模板工具链并固定 rc SDK 依赖，构建 `dist/manus.poa`。
+- [x] 分开表达 Agent 定义、方案中的定义引用和 Runtime 实例 ID。
+- [x] 实现生成数据入口校验和前置结果传递。
+- [x] 实现检查、有限修订和失败停止。
+- [x] 运行静态检查、执行器与契约测试、构建打包。
 
 ### 人工验收契约 H1：工程可运行
 
-操作：按手册第 1 节安装与构建，再在 TUI 启动 Manus。指标：四项检查退出码均为 0，包存在且能显示任务输入框。预期：可输入自由文本，没有初始化错误。证据：命令结果、包路径、TUI 输入框。
+操作：按手册第 1 节安装与构建，启动 TUI 并运行 Manus。
+
+指标：lint、typecheck、test、package 均成功；包存在且能显示自由文本输入框。
+
+预期：没有初始化错误，用户可以输入自己的任务。
+
+证据：检查输出、包路径、TUI 输入框。人工结论由手册签收表记录。
 
 ## 任务 2：真实模型联调与 TUI 展示
 
-目标：完成设计验收项 A2、A3、A4、A5 的真实运行验证。
+范围：`src/main.ts`、`input.ts`、`config.ts`、`generator.ts`、`agent.ts`、`run.ts`。
 
-修改范围：`src/config.ts`、`src/agent.ts`、`src/generator.ts`、`src/main.ts`。只有真实运行暴露契约问题时再修改 `bundle.ts` 与相关测试。
+接口：`readTask(): Promise<TaskRequest>`；`createAgentRunner(config, trace): AgentRunner`；`generateBundle(task, config, runAgent): Promise<GeneratedBundle>`。
 
-输入：用户的自然语言任务和当前模型配置。输出：真实 `GeneratedBundle`、`RunRecord` 以及可读的 TUI 展示。
-
-- [ ] 构建后在 TUI 执行 `/poa fg /Users/notyourkay/Manus-brainary/dist/manus.poa`。
-- [ ] 输入自包含文本任务，观察真实 `create_agent → run → acquire_agent_result → close` 行为。
-- [ ] 确认生成产物被解析，任务实例收到生成定义和执行指令，最终输出可展示。
-- [ ] 在 `main.ts` 增加简洁的角色与方案摘要、最终结果展示，保留完整记录输出。
-- [ ] 在 `execution.ts` 增加步骤开始进度通知；保持现有步骤结束记录。
-- [ ] 使用两个不同复杂度的输入，确认角色/步骤来自生成结果；简单任务可以只生成一步。
-- [ ] 保存运行版本、输入、实际生成产物、关键 SDK 结果及最终输出到 `docs/research/` 的联调记录。
-
-通过条件：真实生成与执行闭环完成；展示能解释“生成了什么、如何执行、结果是什么”。若 SDK 返回错误，保存可复现调用与原始错误后反馈，不把工具层问题转化为 Manus 新架构。
+- [x] 在真实 TUI 前台用 ask 接收自然语言。
+- [x] 验证创建、执行、等待、关闭真实 Agent 的完整调用。
+- [x] 展示角色、步骤、任务包路径、最终结果和记录路径。
+- [x] 验证会议任务生成两步方案，简单 JSON 任务生成一步方案。
+- [x] 在构建产物设置 Runtime 支持的执行等待参数，使较长任务的最终输出正常返回 TUI。
+- [x] 记录 rc 的宿主启动条件：`brainary -m gpt-5.5`，实际任务 Agent 仍用 `gpt-5.6-sol`。
 
 ### 人工验收契约 H2：自然语言生成与执行
 
-操作：按手册第 2 节提交样例，再提交一条自己的文本任务。指标：角色定义、步骤依赖和验收条件可查看；真实实例 ID、步骤进度、最终结果可对应。预期：流程由生成方案决定，最终结果符合任务要求。证据：两次运行目录、生成产物与执行结果。
+操作：按手册第 2 节提交会议样例，再提交一条自己的自包含文本任务。
 
-## 任务 3：确定业务样例并完成场景验收
+指标：可查看角色定义、步骤依赖和验收条件；真实实例 ID、步骤执行记录与最终结果可以关联。
 
-目标：完成 A6。本轮以自包含的文本结构化任务验证通用机制，用户可输入自己的文本任务；后续业务工具场景另行补充。
+预期：流程来自生成方案，界面最终显示方案摘要、资产路径与结果。简单任务允许只生成一个 Agent、一个步骤。
 
-修改范围：`src/config.ts` 的能力目录、生成提示词、场景对应的结果检查；新增该场景的真实输入和预期结果测试数据。
+证据：两次运行目录、生成产物、TUI 最终输出。
 
-- [ ] 为选定场景写一个完整输入、预期交付物及客观验收条件。
-- [ ] 使用 SDK 已提供的工具，补充 `availableTools`，由生成 Agent 选择角色所需子集。
-- [ ] 在实际调用环境验证权限与工具可用性；接入问题按 SDK 反馈流程处理。
-- [ ] 为结果增加场景所需的客观检查，例如实际读取输出文件，或运行交付物的已有验证命令。
-- [ ] 明确记录模型文本检查与客观校验各自的结果，不混成一个无法解释的“成功”。
-- [ ] 完成至少一个成功样例，以及一个能触发修订或明确失败的样例。
+## 任务 3：文本场景正确性与失败语义
 
-通过条件：生成的 Agent 和方案完成真实任务，用户能依据交付物验证结果。
+范围：真实会议/JSON 样例、`tests/execution.test.ts`、`scripts/check-run.mjs`。
+
+本阶段以自包含文本任务验收，工具目录为空。业务工具场景在用户确定后另行扩展。
+
+- [x] 给出明确输入和客观检查条件，逐项核对会议任务中的事实与未知项。
+- [x] 将 JSON 结果解析后与三条预期数据逐项比较。
+- [x] 用真实执行器测试依赖传递、修订反馈和失败停止；只替换模型回复边界。
+- [x] 用真实 Runtime 的不兼容宿主配置触发 SDK 错误，验证错误状态、轨迹和 WM 快照保存，且没有成功结果文件。
+- [x] 保存模型审查结果，同时用独立核查确认样例内容与记录一致性。
 
 ### 人工验收契约 H3：结果可客观核查
 
-操作：按手册第 3 节核对样例的字段和事实，并运行固定失败样例验证停止语义。指标：必需事实完整、无新增事实；未通过的步骤不进入下游。预期：正确任务成功，不满足条件时有明确失败/修订记录。证据：结果文件和对应轨迹；固定流程测试不替代真实模型运行。
+操作：按手册第 3 节核对事实、表格和待确认项，运行固定失败用例；按第 4 节核查运行记录。
 
-## 任务 4：运行资产持久化
+指标：必需事实完整、未知字段未被补成事实、输出格式正确；检查失败后修订次数受方案限制，下游不继续执行。
 
-目标：完成 B1，为任务复用和 RSI 提供可读取的记录。
+预期：成功任务得到符合要求的结果，失败有明确状态和证据。本轮真实成功样例没有触发修订，修订和业务检查失败分支由执行器测试覆盖；真实 SDK 错误留痕另有运行证据。
 
-新增 `src/records.ts`，接入发布的 WM SDK；`main.ts` 在生成完成、执行完成时保存应用记录。若记录格式变化，同步修改 `contracts.ts` 和设计。
+证据：result.md、record.json、trace.jsonl，以及执行器测试结果。
 
-拟提供的应用接口：
+## 任务 4：运行资产与轨迹留痕
 
-```ts
-saveRun(record: RunRecord): Promise<string>
-loadRun(id: string): Promise<RunRecord>
-```
+范围：`src/records.ts`、`files.ts`，主入口和执行入口中的记录接线。
 
-- [ ] 使用当前 SDK 的 schema 注册和读写接口实现记录保存与读取；以已安装发布包为准。
-- [ ] 为记录补齐运行 ID、生成策略版本、模型与工具配置、执行器版本。
-- [ ] 保存生成产物后再执行；执行完成后保存对应结果，保证两者能关联。
-- [ ] 在 TUI 输出记录标识，验证另一次运行可以读取同一记录。
-- [ ] 用真实存储读取结果与原记录比较，验证契约字段被完整保存。
+接口：`RunJournal.open(task, config, asset?)` 创建本次记录；`trace(event)` 追加轨迹；`save()` 保存记录并使用 WM SDK 写入/读回快照；`fail(error)` 保存错误结论。
 
-通过条件：任务、生成定义、方法与执行结果能关联读取。SDK 缺失必需接口时记录反馈与影响，不自建替代 WM。
+- [x] 分配独立 asset ID 与 run ID，区分生成与复用运行。
+- [x] 记录任务、配置、生成器/执行器版本、时间、状态、结果和错误。
+- [x] 保存生成原文、Agent 定义、每次调用输入输出、实例 ID、检查与修订事件。
+- [x] 使用 SDK 注册、写入并读回当前 WM 状态，导出读回快照。
+- [x] 生成后先保存定义与任务包，再进入任务执行。
+- [x] 验证关闭会话后文件可读，WM 快照与保存的运行记录一致。
 
 ### 人工验收契约 H4：轨迹与产物可追溯
 
-操作：按手册第 4 节打开本次资产与运行目录，重启后再次读取文件和 WM 快照。指标：任务、生成原文、定义、方案、调用输入输出、检查、时间、状态、版本均可关联。预期：终端关闭后记录仍存在；SDK 读回快照与保存内容一致。证据：asset.json、record.json、trace.jsonl、wm-snapshot.json。
+操作：按手册第 4 节查看资产/运行目录，执行 `node scripts/check-run.mjs <运行目录>`，关闭会话后重新打开文件。
 
-## 任务 5：导出独立任务 PoA
+指标：任务、原始生成回复、定义、方案、调用输入输出、检查、时间、状态和版本可关联；核查命令返回 `verified: true`。
 
-目标：完成 B2，验证“生成后的方法”可以脱离生成阶段单独运行。
+预期：资产和每次运行独立保存；record.json 与 WM 读回快照一致；错误运行保留已发生的轨迹。
 
-范围：从 `main.ts` 分离已有任务执行入口，新增任务包构建入口和脚本，复用当前构建/打包依赖。生成与执行模块保持各自职责。
+证据：asset.json、record.json、trace.jsonl、wm-snapshot.json、result.md。
 
-- [ ] 接收已保存的任务与 `GeneratedBundle`，执行同一份入口校验。
-- [ ] 将任务、定义与方案作为包内资源，使用现有 `executeBundle` 组织执行。
-- [ ] 使用 Rolldown 和现有打包逻辑生成独立的任务 `.poa`，提供清楚的名称和版本。
-- [ ] 在新的 TUI 运行中启动任务包，验证没有调用 Manus 生成 Agent。
-- [ ] 比较任务包执行记录与原方案的角色、步骤、依赖和结果。
-- [ ] 需要复用于同类新任务时，再把业务输入提取为明确参数，并补充参数化样例。
+## 任务 5：自动导出与独立任务包复用
 
-通过条件：任务包能独立运行，生成资产的复用路径可演示。Manus 本次运行必须直接生成任务包，不要求用户再手工运行构建命令。
+范围：`src/task-package.ts`、`task-main.ts`、`run.ts`、`rolldown.config.mjs`、任务包测试。
+
+接口：`buildTaskArchive(asset, program)` 构建独立包；`exportTaskPackage(asset, program, directory)` 在 Manus 运行时输出 task.poa；`executeAsset(asset, journal)` 为初次执行与复用入口提供同一执行逻辑。
+
+- [x] 构建 Manus 时捆绑任务运行入口，运行时把已校验的定义、方案和任务组合成完整 `.poa`。
+- [x] 自动输出 task.poa，用户无需手动再执行导出脚本。
+- [x] 包含 main.js、manifest.toml 和 asset.json，不依赖 Manus 源码与 node_modules。
+- [x] 把包复制到独立目录，在新的 TUI 会话中直接运行。
+- [x] 验证资产与方案一致、新 run ID、新实例 ID、零次生成 Agent 调用，原记录保留。
+- [x] 保存独立重跑的结果与轨迹，并核对任务结果。
+
+第一版复用执行原任务。同类新任务的参数化作为后续需求处理。
 
 ### 人工验收契约 H5：任务资产独立复用
 
-操作：按手册第 5 节，在新的 Brainary 会话中直接运行生成的任务 `.poa`。指标：0 次生成 Agent 调用；定义与方案沿用原资产；创建新的执行实例与运行 ID；产出通过验收的结果。预期：无需 Manus 源码、node_modules 或重新生成方案，任务包直接执行原任务，并单独留痕。证据：任务包、原运行与复用运行的记录、最终结果。
+操作：按手册第 5 节在新会话启动生成的任务 `.poa`，再执行 `node scripts/check-run.mjs <复用运行目录> <原生成运行目录>`。
+
+指标：`generatorCalls` 为 0；资产、定义与方案一致；run ID 和执行实例更新；任务结果通过检查。
+
+预期：无需重新生成方案或提供 Manus 源码，任务包直接执行保存的任务并单独留痕。运行环境需要 Brainary、模型配置及用于文件导出的 Node.js。
+
+证据：任务包、原运行与复用运行记录、最终结果。
 
 ## 第二阶段入口：RSI
 
-第二阶段单独设计评估闭环，复用本阶段的任务、生成产物和运行记录。
+本轮到此停止，等待用户完成第一阶段人工验收。
 
-先确定改进对象（任务 Agent 定义、任务方法或生成策略）、验收集和度量，再实现候选生成、对照执行、效果比较及版本选择。第一阶段的步骤修订不替代这些机制。
+第二阶段再确定改进对象、固定验收集和度量，实现候选改进、对照执行、效果比较与版本选择。
 
 ### 第二阶段人工验收契约（本轮不实施）
 
-操作：在固定验收集上运行原版本与候选改进版本。指标：效果、成本与失败率有可比较数据，版本选择可追溯。预期：RSI 的改进结论由对照结果支持。详细操作手册在用户完成第一阶段验收后，随第二阶段设计确定。
+在相同验收集上运行原版本与候选版本，检查效果、成本与失败率数据，以及版本选择依据。详细操作手册随第二阶段设计确定，不把第一阶段的一次任务修订作为 RSI 验收结果。

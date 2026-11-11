@@ -27,7 +27,7 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm package
-/Users/notyourkay/brainary-rc-0.2.0/bin/brainary
+/Users/notyourkay/brainary-rc-0.2.0/bin/brainary -m gpt-5.5
 ```
 
 在 TUI 输入：
@@ -36,7 +36,7 @@ pnpm package
 /poa fg /Users/notyourkay/Manus-brainary/dist/manus.poa
 ```
 
-预期：检查和构建成功；显示自由文本任务输入框。模型配置使用 Brainary 的 `custom / gpt-5.6-sol`，密钥通过既有配置提供。
+预期：检查和构建成功；显示自由文本任务输入框。TUI 宿主选择 `gpt-5.5`，以启用当前 SDK 对应的 V1 Agent 工具；程序创建的实际 Agent 使用 `custom / gpt-5.6-sol`，密钥通过既有配置提供。此处是 rc 版本的已验证启动配置，不修改用户的全局默认模型。
 
 ## 2. H2：自然语言生成与执行
 
@@ -45,7 +45,7 @@ pnpm package
 ```text
 请把下面的会议记录整理为中文行动清单，并指出未明确的信息。只使用给出的事实，不要补充日期或负责人。
 会议记录：张敏负责整理接口清单，周三前完成；李雷负责联调，等接口清单完成后启动；测试负责人和截止时间都还没确定。
-输出要求：用 Markdown 表格列出事项、负责人、时间、依赖；再用列表列出待确认项。先提取事实，再形成最终结果。
+输出要求：用 Markdown 表格列出事项、负责人、时间、依赖；表格包含接口清单、联调、测试三项；再用列表列出待确认项。先提取事实，再形成最终结果。
 ```
 
 检查：
@@ -87,12 +87,21 @@ pnpm package
 | `result.md` | 最终任务结果 | 按 H3 对照 |
 | `wm-snapshot.json` | SDK 读回的运行状态快照 | 能对应本次运行的状态与标识 |
 
+可执行以下命令核查记录关联、WM 快照一致性、调用数量和结果一致性：
+
+```bash
+node scripts/check-run.mjs <运行目录>
+node scripts/check-run.mjs <复用运行目录> <原生成运行目录>
+```
+
+预期输出 `verified: true`；复用运行的 `generatorCalls` 必须为 0。该命令核对运行证据，任务内容正确性仍按 H3 检查。
+
 关闭 TUI 后重新打开上述文件，内容仍存在。生成失败也应保留已接收的任务、生成原文或错误、已发生的轨迹，不输出假的成功结果。
 
 ## 5. H5：独立重跑生成的任务包
 
 1. 复制 TUI 输出的任务包绝对路径。
-2. 退出原会话，打开一个新的 Brainary TUI。
+2. 退出原会话，用 `brainary -m gpt-5.5` 打开一个新的 Brainary TUI。
 3. 输入 `/poa fg <任务包的绝对路径>`。
 4. 不重新输入原任务、不重新生成方案，观察任务开始执行。
 5. 对比原运行和复用运行的记录。
@@ -110,3 +119,13 @@ pnpm package
 ## 6. 交接要求
 
 开发交接提供 Git 提交、构建包、至少一次真实生成运行和一次独立重跑的证据目录，以及剩余已知问题。开发自测完成后停在第一阶段，等待本表的人工结论。
+
+## 7. 本机已验证的样例
+
+- 生成器包：`/Users/notyourkay/Manus-brainary/dist/manus.poa`。
+- 会议任务包：`/Users/notyourkay/Manus-brainary/artifacts/manus/assets/b584af30-4b47-4a21-93a5-73b54eea51a5/task.poa`。
+- 原运行：`artifacts/manus/runs/28502b5e-9324-4d90-91e7-baffe307e077/`。
+- 独立复用证据副本：`artifacts/manus/runs/d9d5e8c6-7a56-43df-a695-db3c144d7bf2/`。
+- JSON 样例：`artifacts/manus/runs/e8f971f2-412e-45ed-8609-7b747a6f84f6/`。
+
+开发自测记录见 `docs/research/2026-11-11-phase-1-verification.md`。上表的人工结论保持“待验收”，由用户操作后填写。

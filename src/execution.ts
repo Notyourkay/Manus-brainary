@@ -7,23 +7,32 @@ import type {
   GeneratedBundle,
   StepRecord,
   TaskRequest,
+  TraceSink,
 } from "./contracts.js";
 
 export async function executeBundle(
   task: TaskRequest,
   bundle: GeneratedBundle,
   runAgent: AgentRunner,
-  onStep: (record: StepRecord) => void,
+  onStep: (record: StepRecord) => void | Promise<void>,
+  trace: TraceSink = async () => {},
 ): Promise<ExecutionResult> {
   const definitions = new Map(bundle.agents.map((agent) => [agent.id, agent]));
   const outputs = new Map<string, string>();
   const records: StepRecord[] = [];
   for (const step of bundle.steps) {
+    await trace({ type: "step_started", step });
     const definition = definitions.get(step.agentId) as AgentDefinition;
     const message = stepMessage(task, step, outputs);
-    const record = await executeStep(step, definition, message, runAgent);
+    const record = await executeStep(
+      step,
+      definition,
+      message,
+      runAgent,
+      trace,
+    );
     records.push(record);
-    onStep(record);
+    await onStep(record);
     if (record.status === "failed") {
       return { status: "failed", steps: records, finalOutput: null };
     }
@@ -58,6 +67,7 @@ async function executeStep(
   definition: AgentDefinition,
   message: string,
   runAgent: AgentRunner,
+  trace: TraceSink,
 ): Promise<StepRecord> {
   const record: StepRecord = {
     stepId: step.id,
@@ -78,6 +88,12 @@ async function executeStep(
       JSON.stringify({ request: message, output: reply.text }),
     );
     const review = parseReview(reviewed.text);
+    await trace({
+      type: "step_reviewed",
+      stepId: step.id,
+      attempt: attempt + 1,
+      review,
+    });
     record.attempts.push({
       agentId: reply.agentId,
       output: reply.text,
@@ -93,6 +109,13 @@ async function executeStep(
       previousOutput: reply.text,
       feedback: review.feedback,
     });
+    if (attempt < step.maxRevisions) {
+      await trace({
+        type: "step_revision",
+        stepId: step.id,
+        feedback: review.feedback,
+      });
+    }
   }
   return record;
 }

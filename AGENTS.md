@@ -3,12 +3,12 @@
 ## 项目范围
 
 - Manus 的开发在本仓库 `/Users/notyourkay/Manus-brainary` 中进行，基于 `brainary-poa-template` 的现有开发流程，使用 Brainary `0.2.0-rc` 及对应 SDK。
-- 第一阶段实现任务 Agent 和执行方法的生成，并运行验证生成产物；第二阶段实现 RSI。
+- 第一阶段实现任务 Agent 和执行方法的生成、自动导出独立任务 PoA、执行与轨迹留痕，并验证任务包独立复用；第一阶段完成后停下来交用户人工验收，第二阶段再实现 RSI。
 - PoA 是编排 Agent 和工具的程序。不要把 PoA、Agent 配置与运行中的 Agent 实例混为一谈，也不要用单/双 PoA 的数量定义 Manus 的能力。
 - 工具版本、路径等常规环境问题直接解决，不作为额外审批或开发前置阻塞。记录会影响实现的选择，不为小细节增加流程。
 - WM、Agent SDK 和模型接入按当前发布接口使用。实际发现 SDK 缺失必要能力或存在缺陷时，整理具体复现与影响，反馈给对应负责人修复；不在 Manus 中承接 SDK 开发或自建替代层。
 - 采用轻量 SDD：设计与契约先行，按可运行的小步骤实现和验证，接口或范围变化时同步更新文档；沿用模板已有工具链。
-- 当前权威设计见 `docs/design/manus-demo-v1.md`，实施步骤见 `docs/plans/manus-demo-v1.md`，接入证据见 `docs/research/2026-11-11-demo-readiness.md`。计划、骨架实现与真实联调结果分别记录。
+- 当前权威设计见 `docs/design/manus-demo-v1.md`，实施步骤见 `docs/plans/manus-demo-v1.md`，人工验收见 `docs/acceptance/phase-1.md`，第一阶段真实联调证据见 `docs/research/2026-11-11-phase-1-verification.md`。前期接入调查保留在 `docs/research/2026-11-11-demo-readiness.md`。
 
 ## 通用开发规则
 

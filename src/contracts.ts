@@ -4,6 +4,7 @@ export interface ManusConfig {
   model: ModelSpec;
   availableTools: BrainaryTool[];
   agentTimeoutMs: number;
+  artifactRoot: string;
 }
 
 export interface TaskRequest {
@@ -70,7 +71,35 @@ export interface ExecutionResult {
 
 export interface RunRecord {
   version: 1;
+  runId: string;
+  assetId: string;
+  mode: "generate" | "replay";
+  status: "running" | "completed" | "failed" | "error";
+  startedAt: string;
+  finishedAt: string | null;
+  config: ManusConfig;
   task: TaskRequest;
-  bundle: GeneratedBundle;
-  execution: ExecutionResult;
+  bundle: GeneratedBundle | null;
+  execution: ExecutionResult | null;
+  error: string | null;
+  generatorVersion: string;
+  executorVersion: string;
 }
+
+export interface TaskAsset {
+  version: 1;
+  assetId: string;
+  createdAt: string;
+  task: TaskRequest;
+  config: ManusConfig;
+  bundle: GeneratedBundle;
+  generatorVersion: string;
+  executorVersion: string;
+}
+
+export interface TraceEvent {
+  type: string;
+  [field: string]: unknown;
+}
+
+export type TraceSink = (event: TraceEvent) => Promise<void>;

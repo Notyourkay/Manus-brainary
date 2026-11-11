@@ -4,11 +4,15 @@ import {
   type AgentResult,
   AgentResultTimeoutError,
 } from "@brainary/poa-sdk";
-import type { AgentRunner, ManusConfig } from "./contracts.js";
+import type { AgentRunner, ManusConfig, TraceSink } from "./contracts.js";
 
-export function createAgentRunner(config: ManusConfig): AgentRunner {
+export function createAgentRunner(
+  config: ManusConfig,
+  trace: TraceSink = async () => {},
+): AgentRunner {
   const executor = new AgentExecutor();
   return async (definition, message) => {
+    await trace({ type: "agent_requested", definition, message });
     const agent = await executor.create_agent({
       name: definition.name,
       agent_config: {
@@ -21,6 +25,11 @@ export function createAgentRunner(config: ManusConfig): AgentRunner {
       },
     });
     try {
+      await trace({
+        type: "agent_created",
+        definitionId: definition.id,
+        agentId: agent.agent_id,
+      });
       const result = await runToCompletion(
         agent,
         executor,
@@ -32,9 +41,28 @@ export function createAgentRunner(config: ManusConfig): AgentRunner {
           `${definition.name} 执行未完成：${result.error ?? result.agent_status}`,
         );
       }
+      await trace({
+        type: "agent_completed",
+        definitionId: definition.id,
+        agentId: agent.agent_id,
+        output: result.result,
+      });
       return { agentId: agent.agent_id, text: result.result };
+    } catch (error) {
+      await trace({
+        type: "agent_error",
+        definitionId: definition.id,
+        agentId: agent.agent_id,
+        error: String(error),
+      });
+      throw error;
     } finally {
       await agent.close();
+      await trace({
+        type: "agent_closed",
+        definitionId: definition.id,
+        agentId: agent.agent_id,
+      });
     }
   };
 }
