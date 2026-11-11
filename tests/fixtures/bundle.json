@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "summary": "先提取要求，再形成答案",
+  "agents": [
+    {
+      "id": "reader",
+      "name": "要求提取 Agent",
+      "systemPrompt": "准确提取用户提供的要求。",
+      "knowledge": [],
+      "tools": []
+    },
+    {
+      "id": "writer",
+      "name": "答案生成 Agent",
+      "systemPrompt": "根据输入要求形成完整答案。",
+      "knowledge": [],
+      "tools": []
+    }
+  ],
+  "steps": [
+    {
+      "id": "extract",
+      "agentId": "reader",
+      "instruction": "提取要求",
+      "inputFrom": [],
+      "acceptanceCriteria": ["保留用户明确提出的全部要求"],
+      "maxRevisions": 1
+    },
+    {
+      "id": "answer",
+      "agentId": "writer",
+      "instruction": "形成最终答案",
+      "inputFrom": ["extract"],
+      "acceptanceCriteria": ["答案逐项回应提取的要求"],
+      "maxRevisions": 0
+    }
+  ]
+}

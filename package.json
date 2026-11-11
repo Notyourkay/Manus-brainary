@@ -1,0 +1,35 @@
+{
+  "name": "manus-brainary",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Manus agent generation and execution on Brainary 0.2.0-rc.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "packageManager": "pnpm@12.14.0",
+  "scripts": {
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "rolldown -c",
+    "package": "pnpm build && node scripts/package.mjs"
+  },
+  "dependencies": {
+    "@brainary/poa-sdk": "0.2.0-rc",
+    "@brainary/wm-sdk": "0.2.0-rc",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "fflate": "^0.8.3",
+    "smol-toml": "^1.9.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.15",
+    "@types/node": "^26.6.5",
+    "rolldown": "^1.2.14",
+    "tsup": "9.0.0",
+    "typescript": "6.0.3",
+    "vitest": "^5.0.5"
+  }
+}
