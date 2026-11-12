@@ -1,0 +1,6 @@
+order_id,customer,status,amount,refund
+B001,"客户,丙",paid,0.30,0.10
+B002,客户丁,paid,12.34,2.34
+B003,客户丁,cancelled,999.99,0.00
+B004,客户戊,refunded,8.00,8.00
+B005,客户戊,paid,5.66,0.00

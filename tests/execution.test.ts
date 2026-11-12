@@ -3,12 +3,22 @@ import { parseBundle } from "../src/bundle.js";
 import type {
   AgentDefinition,
   AgentRunner,
+  ExecutionInput,
   StepRecord,
 } from "../src/contracts.js";
 import { executeBundle } from "../src/execution.js";
 import fixture from "./fixtures/bundle.json";
 
-const task = { description: "根据我给出的要求生成答案" };
+const task: ExecutionInput = {
+  request: "请按要求 A、B 生成答案",
+  method: {
+    objective: "根据材料生成答案",
+    scenario: "text",
+    inputKind: "text",
+  },
+  material: { kind: "text", value: "要求 A、B" },
+  context: { domain: null, experiences: [], episodes: [], selection: "text" },
+};
 const passed = JSON.stringify({ passed: true, feedback: "满足要求" });
 const failed = JSON.stringify({ passed: false, feedback: "补充要求 B" });
 
@@ -98,6 +108,29 @@ describe("generated plan execution", () => {
     expect(result.finalOutput).toBeNull();
     expect(result.steps).toHaveLength(1);
     expect(agent.calls).toHaveLength(4);
+  });
+
+  it("reuses unchanged definitions while new material reaches every step", async () => {
+    const bundle = parseBundle(JSON.stringify(fixture), []);
+    const before = JSON.stringify(bundle);
+    const first = scriptedRunner(["甲", passed, "答案甲", passed]);
+    const second = scriptedRunner(["乙", passed, "答案乙", passed]);
+    await executeBundle(
+      { ...task, material: { kind: "text", value: "材料甲" } },
+      bundle,
+      first.run,
+      () => {},
+    );
+    await executeBundle(
+      { ...task, material: { kind: "text", value: "材料乙" } },
+      bundle,
+      second.run,
+      () => {},
+    );
+    expect(JSON.parse(first.calls[0].message).material.value).toBe("材料甲");
+    expect(JSON.parse(second.calls[2].message).material.value).toBe("材料乙");
+    expect(second.calls[0].definition).toEqual(first.calls[0].definition);
+    expect(JSON.stringify(bundle)).toBe(before);
   });
 
   it("honors a generated decision to stop without revision", async () => {

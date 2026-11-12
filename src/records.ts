@@ -1,19 +1,21 @@
 import { Kind, PoA } from "@brainary/poa-sdk";
 import type {
   ManusConfig,
+  RunInput,
   RunRecord,
   TaskAsset,
-  TaskRequest,
+  TaskMethod,
+  TaskPackage,
   TraceEvent,
+  Verification,
 } from "./contracts.js";
 import { runNode, writeFiles } from "./files.js";
 
-export const GENERATOR_VERSION = "manus-generator-v1";
-export const EXECUTOR_VERSION = "manus-executor-v1";
-
+export const GENERATOR_VERSION = "manus-generator-v1.3";
+export const EXECUTOR_VERSION = "manus-executor-v1.3";
 const memorySchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "manus-run-v1",
+  $id: "manus-run-v2",
   type: "object",
   additionalProperties: false,
   required: ["run_id", "asset_id", "record"],
@@ -23,54 +25,66 @@ const memorySchema = {
     record: { type: "string" },
   },
 };
-
-interface RunPaths {
+export interface RunPaths {
   runId: string;
   assetId: string;
   runDirectory: string;
   assetDirectory: string;
+  memoryRoot: string;
+  experienceFile: string | null;
 }
-
 export class RunJournal {
   private constructor(
     readonly paths: RunPaths,
     readonly record: RunRecord,
     private readonly memory: PoA,
   ) {}
-
   static async open(
-    task: TaskRequest,
+    method: TaskMethod,
     config: ManusConfig,
+    mode: RunRecord["mode"],
     asset?: TaskAsset,
   ): Promise<RunJournal> {
-    const paths: RunPaths = JSON.parse(
+    const environment = JSON.parse(
       await runNode(`
-import { mkdir } from "node:fs/promises";
-import { resolve, join } from "node:path";
-import { randomUUID } from "node:crypto";
+import {mkdir} from "node:fs/promises";
+import {resolve,join} from "node:path";
+import {randomUUID} from "node:crypto";
 const root = resolve(${JSON.stringify(config.artifactRoot)});
-const runId = randomUUID();
-const assetId = ${JSON.stringify(asset?.assetId ?? null)} ?? randomUUID();
-const runDirectory = join(root, "runs", runId);
-const assetDirectory = join(root, "assets", assetId);
-await mkdir(runDirectory, {recursive:true});
-await mkdir(assetDirectory, {recursive:true});
-console.log(JSON.stringify({runId,assetId,runDirectory,assetDirectory}));
+const runId = randomUUID(), assetId = ${JSON.stringify(asset?.assetId ?? null)} ?? randomUUID();
+const runDirectory=join(root,"runs",runId), assetDirectory=join(root,"assets",assetId);
+await mkdir(runDirectory,{recursive:true}); await mkdir(assetDirectory,{recursive:true});
+console.log(JSON.stringify({
+  paths:{runId,assetId,runDirectory,assetDirectory,memoryRoot:resolve(process.env.MANUS_MEMORY_ROOT || root),experienceFile:process.env.MANUS_EXPERIENCE_FILE ? resolve(process.env.MANUS_EXPERIENCE_FILE) : null},
+  conditions:{node:process.version,platform:process.platform,arch:process.arch,cwd:process.cwd()}
+}));
 `),
     );
+    const paths: RunPaths = environment.paths;
     const record: RunRecord = {
-      version: 1,
+      version: 2,
       runId: paths.runId,
       assetId: paths.assetId,
-      mode: asset ? "replay" : "generate",
+      mode,
       status: "running",
       startedAt: new Date().toISOString(),
       finishedAt: null,
-      task,
       config,
+      method,
+      request: "",
+      input: null,
+      context: null,
       bundle: asset?.bundle ?? null,
       execution: null,
+      acceptance: null,
       error: null,
+      conditions: {
+        ...environment.conditions,
+        model: config.model,
+        sdkVersion: "0.2.0-rc",
+        requiredBrainary: "0.2.0-rc",
+        tools: config.availableTools,
+      },
       generatorVersion: asset?.generatorVersion ?? GENERATOR_VERSION,
       executorVersion: asset?.executorVersion ?? EXECUTOR_VERSION,
     };
@@ -79,17 +93,34 @@ console.log(JSON.stringify({runId,assetId,runDirectory,assetDirectory}));
     await writeFiles(paths.runDirectory, {
       "record.json": JSON.stringify(record, null, 2),
     });
-    await journal.trace({
-      type: "run_started",
-      mode: record.mode,
-      task,
-      config,
-    });
+    await journal.trace({ type: "run_started", mode, method });
     await memory.register_schema(Kind.WM, memorySchema);
     await journal.save();
     return journal;
   }
-
+  async setRequest(request: string): Promise<void> {
+    this.record.request = request;
+    await writeFiles(this.paths.runDirectory, {
+      "request.json": JSON.stringify({ request }, null, 2),
+    });
+    await this.trace({ type: "task_received", request });
+    await this.save();
+  }
+  async setInput(input: RunInput): Promise<void> {
+    this.record.input = input;
+    await writeFiles(this.paths.runDirectory, {
+      "input.json": JSON.stringify(input, null, 2),
+      [this.record.method.inputKind === "csv" && input.source !== "user:text"
+        ? "input.csv"
+        : "input.txt"]: input.content,
+    });
+    await this.trace({
+      type: "input_captured",
+      source: input.source,
+      sha256: input.sha256,
+    });
+    await this.save();
+  }
   async trace(event: TraceEvent): Promise<void> {
     const entry = {
       ...event,
@@ -98,11 +129,10 @@ console.log(JSON.stringify({runId,assetId,runDirectory,assetDirectory}));
       assetId: this.record.assetId,
     };
     await runNode(`
-import { appendFile } from "node:fs/promises";
-await appendFile(${JSON.stringify(`${this.paths.runDirectory}/trace.jsonl`)}, ${JSON.stringify(`${JSON.stringify(entry)}\n`)});
+import {appendFile} from "node:fs/promises";
+await appendFile(${JSON.stringify(`${this.paths.runDirectory}/trace.jsonl`)},${JSON.stringify(`${JSON.stringify(entry)}\n`)});
 `);
   }
-
   async save(): Promise<void> {
     const record = JSON.stringify(this.record, null, 2);
     await writeFiles(this.paths.runDirectory, { "record.json": record });
@@ -111,12 +141,58 @@ await appendFile(${JSON.stringify(`${this.paths.runDirectory}/trace.jsonl`)}, ${
       asset_id: this.record.assetId,
       record,
     });
-    const snapshot = await this.memory.read_data(Kind.WM);
     await writeFiles(this.paths.runDirectory, {
-      "wm-snapshot.json": JSON.stringify(snapshot, null, 2),
+      "wm-snapshot.json": JSON.stringify(
+        await this.memory.read_data(Kind.WM),
+        null,
+        2,
+      ),
     });
   }
-
+  verification(): Verification {
+    return {
+      runId: this.record.runId,
+      input: this.record.input as RunInput,
+      status: this.record.status,
+      executionStatus: this.record.execution?.status ?? null,
+      acceptance: this.record.acceptance,
+      conditions: this.record.conditions,
+      finishedAt: this.record.finishedAt,
+    };
+  }
+  async saveAsset(pkg: TaskPackage, includeRun = false): Promise<void> {
+    await writeFiles(this.paths.assetDirectory, {
+      "asset.json": JSON.stringify(pkg.asset, null, 2),
+      "original-input.json": JSON.stringify(pkg.originalInput, null, 2),
+      "original-request.json": JSON.stringify(
+        { request: pkg.originalRequest },
+        null,
+        2,
+      ),
+      "dependencies.json": JSON.stringify(pkg.asset.dependencies, null, 2),
+    });
+    const verifications = [
+      ...pkg.verification,
+      ...(includeRun ? [this.verification()] : []),
+    ];
+    await runNode(`
+import {readFile,writeFile} from "node:fs/promises";
+const path=${JSON.stringify(`${this.paths.assetDirectory}/asset-state.json`)};
+let previous={verifications:[],humanAcceptance:{status:"pending"}};
+try {previous=JSON.parse(await readFile(path,"utf8"));} catch(error) {if(error.code!=="ENOENT")throw error;}
+const runs=[...new Map([...previous.verifications,...${JSON.stringify(verifications)}].map(item=>[item.runId,item])).values()];
+const executed=runs.some(item=>item.executionStatus!==null);
+const validated=runs.some(item=>item.status==="completed" && item.acceptance?.kind==="objective" && item.acceptance.passed);
+await writeFile(path,JSON.stringify({version:1,assetId:${JSON.stringify(pkg.asset.assetId)},generatedAt:${JSON.stringify(pkg.asset.createdAt)},status:validated?"validated":executed?"executed":"generated",milestones:{generated:true,executed,validated},humanAcceptance:previous.humanAcceptance,verifications:runs},null,2));
+`);
+  }
+  async updateIndex(): Promise<void> {
+    await runNode(`
+import {pathToFileURL} from "node:url";
+const {rebuildIndex}=await import(pathToFileURL(${JSON.stringify(`${this.paths.runDirectory}/resources/memory.mjs`)}));
+await rebuildIndex(${JSON.stringify(this.paths.memoryRoot)}, [${JSON.stringify(`${this.paths.runDirectory}/record.json`)}]);
+`);
+  }
   async fail(error: unknown): Promise<void> {
     this.record.status = "error";
     this.record.error = String(error);

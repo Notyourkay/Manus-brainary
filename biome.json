@@ -1,7 +1,14 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
   "files": {
-    "includes": ["**", "!dist", "!coverage", "!.local", "!artifacts"]
+    "includes": [
+      "**",
+      "!dist",
+      "!coverage",
+      "!.local",
+      "!artifacts",
+      "!.archify"
+    ]
   },
   "formatter": {
     "enabled": true,

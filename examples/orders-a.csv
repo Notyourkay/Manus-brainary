@@ -1,0 +1,5 @@
+order_id,customer,status,amount,refund
+A001,客户甲,paid,100.10,0.00
+A002,客户乙,cancelled,200.00,0.00
+A003,客户甲,paid,50.00,10.10
+A004,客户乙,refunded,20.00,20.00

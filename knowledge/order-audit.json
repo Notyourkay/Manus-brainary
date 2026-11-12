@@ -1,0 +1,39 @@
+{
+  "id": "orders-settlement",
+  "version": "1.0.0",
+  "source": "Manus V1 Demo 订单结算业务约定（2026-11-12），knowledge/order-audit.json",
+  "scenario": "order-audit",
+  "concepts": [
+    "订单：唯一 order_id 对应一条交易",
+    "客户：customer 是汇总维度",
+    "状态：paid、cancelled、refunded",
+    "金额：amount 为原始金额，refund 为退款金额，单位元"
+  ],
+  "relations": [
+    "订单属于客户",
+    "退款冲减订单原始金额",
+    "客户净额等于其有效订单净额之和"
+  ],
+  "rules": [
+    {
+      "id": "orders.exclude-cancelled",
+      "statement": "cancelled 订单不进入结算，不计入 grossCents、refundCents、netCents 和客户汇总。"
+    },
+    {
+      "id": "orders.subtract-refund",
+      "statement": "paid 与 refunded 均纳入；grossCents 累加原始 amount，refundCents 累加 refund，netCents=grossCents-refundCents。全额退款客户保留净额 0。"
+    },
+    {
+      "id": "orders.integer-cents",
+      "statement": "金额仅接受非负、最多两位小数；转为整数分计算，不使用浮点元累加。refund 不超过 amount，order_id 不重复。"
+    },
+    {
+      "id": "orders.customer-total",
+      "statement": "按 customer 汇总有效订单净额；包含 rowCount、includedCount、cancelledCount、grossCents、refundCents、netCents、byCustomer 和 ruleRefs。byCustomer 每项为 customer、netCents。"
+    }
+  ],
+  "methods": [
+    "先用包内 read 工具读取本次 CSV，再按规则计算，最后用 write 工具写 JSON 报告；用工具返回的 sourceSha256 绑定输入。",
+    "CSV 有逗号、引号或换行时遵循 CSV 引号规则，不按逗号直接切分。"
+  ]
+}

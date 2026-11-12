@@ -1,0 +1,16 @@
+[
+  {
+    "id": "orders-check-balance",
+    "version": "1.0.0",
+    "scenario": "order-audit",
+    "content": "写报告前核对 grossCents - refundCents = netCents，客户净额之和也应等于 netCents。取消订单不出现在有效客户汇总中。",
+    "source": "人工维护，knowledge/experiences.json，2026-11-12"
+  },
+  {
+    "id": "text-preserve-unknown",
+    "version": "1.0.0",
+    "scenario": "text",
+    "content": "材料未提供的事实应标为未知，不自行补充日期或人员。",
+    "source": "人工维护，knowledge/experiences.json，2026-11-12"
+  }
+]

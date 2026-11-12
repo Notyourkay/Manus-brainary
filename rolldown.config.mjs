@@ -1,17 +1,22 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { defineConfig, rolldown } from "rolldown";
 
 const input = existsSync("src/main.ts") ? "src/main.ts" : "src/main.js";
 
-export default defineConfig({
+const main = {
   input,
   plugins: [
     {
       name: "embedded-task-program",
       resolveId(id) {
         if (id === "virtual:task-program") return "\0task-program";
+        if (id === "virtual:task-resources") return "\0task-resources";
       },
       async load(id) {
+        if (id === "\0task-resources") {
+          const files = ["table-core.mjs", "order-tools.mjs", "memory.mjs"];
+          return `export default ${JSON.stringify(Object.fromEntries(files.map((name) => [name, readFileSync(`resources/${name}`, "utf8")])))};`;
+        }
         if (id !== "\0task-program") return;
         const task = await rolldown({ input: "src/task-main.ts" });
         try {
@@ -34,4 +39,12 @@ export default defineConfig({
     format: "esm",
     sourcemap: false,
   },
-});
+};
+
+export default defineConfig([
+  main,
+  {
+    input: "src/validation.ts",
+    output: { file: "dist/validation.mjs", format: "esm" },
+  },
+]);

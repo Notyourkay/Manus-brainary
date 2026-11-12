@@ -42,6 +42,7 @@ export const bundleSchema: JSONSchemaType<GeneratedBundle> = {
           "inputFrom",
           "acceptanceCriteria",
           "maxRevisions",
+          "knowledgeRefs",
         ],
         properties: {
           id: { type: "string", minLength: 1 },
@@ -56,6 +57,11 @@ export const bundleSchema: JSONSchemaType<GeneratedBundle> = {
             type: "array",
             minItems: 1,
             items: { type: "string", minLength: 1 },
+          },
+          knowledgeRefs: {
+            type: "array",
+            uniqueItems: true,
+            items: { type: "string" },
           },
           maxRevisions: { type: "number", enum: [0, 1] },
         },
@@ -81,6 +87,7 @@ const validateReview = ajv.compile(reviewSchema);
 export function parseBundle(
   raw: string,
   availableTools: readonly BrainaryTool[],
+  knownRefs: readonly string[] = [],
 ): GeneratedBundle {
   const reply = parse_json_reply<unknown>(raw);
   if (reply.error !== null)
@@ -91,6 +98,11 @@ export function parseBundle(
     );
   }
   validateReferences(reply.value, availableTools);
+  for (const step of reply.value.steps) {
+    for (const id of step.knowledgeRefs) {
+      if (!knownRefs.includes(id)) throw new Error(`未知知识引用：${id}`);
+    }
+  }
   return reply.value;
 }
 

@@ -6,7 +6,7 @@ export async function runNode(source: string): Promise<string> {
   // 单引号 heredoc 阻止 shell 展开；数据用 JSON 序列化写入脚本，不拼成 shell 参数。
   const lines = await terminal.shell_lines(
     `node --input-type=module <<'MANUS_NODE_SCRIPT'\n${source}\nMANUS_NODE_SCRIPT`,
-    { max_output_tokens: 1500 },
+    { max_output_tokens: 24000 },
   );
   return lines.join("\n");
 }
