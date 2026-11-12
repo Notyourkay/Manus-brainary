@@ -65,3 +65,15 @@
 - [x] 提交 V1 代码与文档，推送 main，并创建 `v1-complete` 阶段标签；V2 不启动。
 
 人工契约 H6：中文环境测试通过；新窗口直接运行最新 task.poa，不出现输入框，使用包内原请求/快照完成任务，mode=replay、生成调用为 0。只有显式传入请求时 mode=new；错误金额仍被客观检查拒绝。GitHub main 与 v1-complete 指向本次完成提交。
+
+## 任务 7：同类任务的 TUI 复用入口
+
+分支：`codex/task-reuse-ux`。复用 V1 模板、Brainary 0.2.0-rc 与现有 SDK；V1 完成标签和 main 保持发布基线。
+
+- [x] `src/task-package.ts`、`src/main.ts`：同一资产导出 task.poa 与 task-new.poa，嵌入明确入口模式，交付两条可直接复制的 TUI 命令；首次执行后两个包同步附验证证据。
+- [x] `src/input.ts`、`src/task-main.ts`：新入口展示 method.objective 并询问一次自然语言请求；空答案、拒绝或“取消”结束而不执行。默认入口仍无输入即重跑，显式程序输入继续可用。
+- [x] `tests/input.test.ts`、`tests/task-package.test.ts`：验证入口选择、取消语义，以及两份实际 ZIP 的资产一致与独立运行配置；沿用真实实现测试。
+- [x] lint、typecheck、30 项 test、package；真实 TUI 验证默认 A、新入口 B、取消后未执行。A/B 均通过 13 项检查，B 生成调用为 0。
+- [x] 更新现有设计、手册、README 与分支说明；提交并推送优化分支，留待验收合并。V2 后续单独建分支。
+
+人工契约 H7：运行 task.poa 无问答直接得到原任务结果；运行 task-new.poa 后只输入一段自然语言，无需 JSON 文件/环境变量，得到同类新任务结果。两个包的 assetId、定义和方案相同；新入口取消后没有任务 Agent、业务工具和新 run 产生。用户验收通过后再将本分支合入 main。

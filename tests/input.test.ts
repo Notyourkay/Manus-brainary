@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   inputCaptureScript,
+  parseNewTaskAnswer,
   parsePackageRequest,
   parseUserRequest,
 } from "../src/input.js";
@@ -19,6 +20,33 @@ const capture = (kind: "text" | "csv", value: string) =>
   );
 
 describe("natural-language task entry", () => {
+  it("ends an unanswered or cancelled new-task prompt without replaying", () => {
+    expect(
+      parseNewTaskAnswer({ status: "unavailable", reason: "nonInteractive" }),
+    ).toBeNull();
+    expect(parseNewTaskAnswer({ status: "answered", answers: [] })).toBeNull();
+    for (const text of [null, " ", "取消", "cancel"]) {
+      expect(
+        parseNewTaskAnswer({
+          status: "answered",
+          answers: [{ selected: null, text }],
+        }),
+      ).toBeNull();
+    }
+    expect(
+      parseNewTaskAnswer({
+        status: "answered",
+        answers: [{ selected: null, text: "核对订单", rejected: true }],
+      }),
+    ).toBeNull();
+    const request = "核对当前目录的 orders-b.csv";
+    expect(
+      parseNewTaskAnswer({
+        status: "answered",
+        answers: [{ selected: null, text: request }],
+      }),
+    ).toEqual({ mode: "new", request });
+  });
   it("replays by default and changes tasks only with an explicit request", () => {
     expect(parsePackageRequest(null)).toEqual({ mode: "replay" });
     expect(parsePackageRequest("重跑原任务")).toEqual({ mode: "replay" });

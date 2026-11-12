@@ -1,15 +1,22 @@
-import { notify } from "@brainary/poa-sdk";
+import { notify, text } from "@brainary/poa-sdk";
 import { loadContext } from "./context.js";
-import type { TaskPackage } from "./contracts.js";
+import type { TaskEntryMode, TaskPackage } from "./contracts.js";
 import { writeFiles } from "./files.js";
 import { captureInput, readPackageInput } from "./input.js";
 import { RunJournal } from "./records.js";
 import { executeAsset } from "./run.js";
 
 declare const MANUS_PACKAGE: TaskPackage;
+declare const MANUS_ENTRY_MODE: TaskEntryMode;
 async function main(pkg: TaskPackage): Promise<void> {
-  const request = await readPackageInput();
   const { asset } = pkg;
+  const request = await readPackageInput(MANUS_ENTRY_MODE, asset.method);
+  if (!request) {
+    text(
+      "未提交新任务，本次已结束。原任务未执行；可在 TUI 用 /poa fg 再次打开新任务入口。",
+    );
+    return;
+  }
   const journal = await RunJournal.open(
     asset.method,
     asset.config,

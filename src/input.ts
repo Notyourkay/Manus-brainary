@@ -1,5 +1,5 @@
-import { ask, POA_INPUT } from "@brainary/poa-sdk";
-import type { RunInput, TaskMethod } from "./contracts.js";
+import { type AskResult, ask, POA_INPUT } from "@brainary/poa-sdk";
+import type { RunInput, TaskEntryMode, TaskMethod } from "./contracts.js";
 import { runNode } from "./files.js";
 
 export type PackageRequest =
@@ -15,8 +15,31 @@ export async function readRequest(): Promise<string> {
     : parseUserRequest(supplied);
 }
 
-export async function readPackageInput(): Promise<PackageRequest> {
-  return parsePackageRequest(await launchInput());
+export async function readPackageInput(
+  entryMode: TaskEntryMode,
+  method: TaskMethod,
+): Promise<PackageRequest | null> {
+  const supplied = await launchInput();
+  if (supplied !== null || entryMode === "replay")
+    return parsePackageRequest(supplied);
+  return parseNewTaskAnswer(
+    await ask({
+      questions: [
+        {
+          question: `此 Agent 用于：${method.objective}\n请描述本次要完成的同类任务，资料和文件位置可直接写在描述里。输入“取消”结束本次运行。`,
+        },
+      ],
+    }),
+  );
+}
+
+export function parseNewTaskAnswer(result: AskResult): PackageRequest | null {
+  if (result.status === "unavailable") return null;
+  const answer = result.answers[0];
+  const request = answer?.text?.trim();
+  if (answer?.rejected || !request || /^(取消|cancel)[。！!]?$/iu.test(request))
+    return null;
+  return parsePackageRequest(request);
 }
 
 export function parsePackageRequest(value: unknown): PackageRequest {

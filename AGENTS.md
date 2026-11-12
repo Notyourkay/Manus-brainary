@@ -9,6 +9,7 @@
 - WM、Agent SDK 和模型接入按当前发布接口使用。实际发现 SDK 缺失必要能力或存在缺陷时，整理具体复现与影响，反馈给对应负责人修复；不在 Manus 中承接 SDK 开发或自建替代层。
 - Manus 入口接收完整自然语言任务，由外层 Agent 提炼目标与资料；不要求用户填写目标/材料表单，不把订单 CSV 验收场景作为通用输入协议。
 - task.poa 默认直接重跑包内原请求与资料快照，不等待用户输入；只有显式传入完整新请求时才执行同类新任务。
+- `codex/task-reuse-ux` 优化分支为同一资产增加 task-new.poa，通过 TUI 输入一句新任务；不合并 main，验收后再集成。V2 开始时从届时 main 单独建立 codex/v2-rsi。
 - 采用轻量 SDD：设计与契约先行，按可运行的小步骤实现和验证，接口或范围变化时同步更新文档；沿用模板已有工具链。
 - 当前权威设计见 `docs/design/manus-demo-v1.md`，实施步骤见 `docs/plans/manus-demo-v1.md`，人工验收见 `docs/acceptance/phase-1.md`；自测摘要和证据路径集中在人工验收手册中。
 

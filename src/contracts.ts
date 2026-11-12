@@ -190,6 +190,7 @@ export interface TaskPackage {
   experiences: Experience[];
   verification: Verification[];
 }
+export type TaskEntryMode = "replay" | "new";
 export interface ToolReceipt {
   callId: string;
   agentId: string;

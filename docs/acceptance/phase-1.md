@@ -79,25 +79,29 @@ node scripts/check-run.mjs <运行目录> [原生成运行目录]
 
 成功订单运行预期 verified=true；修改报告副本中的净额后核查应失败。只改副本，保留真实证据。
 
-## 5. H5/H6：同一任务包默认重跑与显式复用
+## 5. H5/H6/H7：直接重跑与一句话复用
 
 复制最新生成的 task.poa 到其他工作目录，用默认配置启动新的 Brainary 会话，运行 `/poa fg <任务包绝对路径>`，无需再输入任何内容。
 
 预期：不出现任务输入框，直接使用包内原请求/快照；净额为 14000 分，输入哈希与 A 相同，不依赖原文件位置。mode=replay，asset ID、定义和方案不变，生成调用为 0，新 run 与新实例产生。任务包不再因等待用户填写任务而耗尽执行时间；模型与工具调用仍有正常执行时限。
 
-只有需要处理同类新任务时，才使用显式输入入口。下面是已有环境变量通道的操作示例，不影响默认重跑：
+在优化分支中，处理同类新任务只需运行同目录下的 `task-new.poa`：
 
-```bash
-cd /Users/notyourkay/Manus-brainary
-mkdir -p .local
-cat > .local/task-request.json <<'JSON'
-{"request":"这次请核对 /Users/notyourkay/Manus-brainary/examples/orders-b.csv，仍然输出结算总额、退款、净额和客户汇总。"}
-JSON
-MANUS_INPUT_FILE=/Users/notyourkay/Manus-brainary/.local/task-request.json \
-/Users/notyourkay/brainary-rc-0.2.0/bin/brainary
+```text
+/poa fg <资产目录>/task-new.poa
 ```
 
-在这个新会话中运行同一 task.poa，预期不出现输入框，mode=new；任务 Agent 从请求中提取文件位置，实际读写工具，净额 1586 分，定义和方案不变。该环境变量只对上面的启动命令生效；退出后按默认命令启动 Brainary，又会直接重跑 A。编程调用可用 POA_INPUT 传入同样的字符串或 {request}。
+TUI 显示该 Agent 的用途，直接输入：
+
+```text
+这次请核对 /Users/notyourkay/Manus-brainary/examples/orders-b.csv，仍然输出结算总额、退款、净额和客户汇总。
+```
+
+预期：只有这一次任务问答，不需要填写字段、创建 JSON 文件或设置环境变量。mode=new，任务 Agent 读取本次文件并写报告，净额 1586 分；assetId、定义和方案与 task.poa 相同，生成调用为 0。
+
+再次运行新任务入口，输入“取消”或提交空答案，应显示本次已结束，不产生新 run、任务 Agent 或业务工具调用。按 Esc 由 TUI 中断本次请求。默认 task.poa 始终可直接重跑 A。
+
+编程集成仍可通过 POA_INPUT 或 MANUS_INPUT_FILE 显式传入字符串或 {request}，显式输入优先于交互入口。
 
 截图中的 fail 是中文语言环境改变客户汇总排序，导致固定顺序断言失败，金额本身一致。当前验收采用确定性排序，中英文环境均应通过：
 
@@ -140,7 +144,7 @@ MANUS_MEMORY_ROOT=/Users/notyourkay/Manus-brainary/artifacts/manus \
 
 本轮联调摘要在 `artifacts/manus/verification-20261112/v1-complete/summary.json`，包含每次请求、核查结果、生成/工具调用次数、证据位置和会话 ID。生成运行保留在 `artifacts/manus/runs/`；独立目录的两次运行已原样复制到 `v1-complete/runs/`，资产状态保存在 `v1-complete/asset-state/`。前期无材料、澄清及路径提取的证据保留在同级 `natural-input/summary.json`。可对这些运行目录执行第 4 节核查命令。
 
-当前已验证的任务包可直接运行：
+V1 基线已验证的任务包可直接运行；本分支双入口验证见第 8 节：
 
 ```text
 /poa fg /Users/notyourkay/Manus-brainary/artifacts/manus/assets/8ed90936-b117-4be0-9aea-5b117f754308/task.poa
@@ -158,3 +162,32 @@ MANUS_MEMORY_ROOT=/Users/notyourkay/Manus-brainary/artifacts/manus \
 | H6 | 中文环境测试、无等待默认重跑、显式新输入 | 本轮真实联调与自动回归通过，证据见上表 |
 
 按用户本轮指示，V1 标记完成，GitHub 阶段标签为 `v1-complete`。每个新生成资产仍保留自己的 humanAcceptance 状态，阶段完成不代替后续任务的人工签收。自动经验提炼和内外层 RSI 属于 V2，尚未启动。
+
+## 8. H7：优化分支联调与验收
+
+分支 `codex/task-reuse-ux` 于 2026-11-12 完成开发自测。生成器为 v1.3，执行器为 v1.4；lint、typecheck、9 个文件的 30 项测试和 package 均通过。默认配置的 Brainary 0.2.0-rc 中，任务 Agent 使用 custom / gpt-5.6-sol。
+
+以下运行使用同一资产 `bd5f5a5a-c5fe-4eb2-8a94-26a01d5ce74e`：
+
+| 验证 | run ID | 结果 |
+| --- | --- | --- |
+| Manus 生成并执行 A | 1b8cf16e-13a8-4e49-abf9-4882ff24adee | 导出两个入口，净额 14000 分，13/13 客观检查通过 |
+| 独立目录 TUI 新入口执行 B | 3e50ec0f-1985-452d-ae5d-ed5fe2b8f597 | 只输入一句自然语言，净额 1586 分，13/13 通过；生成调用为 0 |
+| 新会话默认入口重跑 A | 5c22f18b-bb96-4abc-a489-0bf04d7a2ae9 | 没有任务问答，使用原快照；净额 14000 分，13/13 通过；生成调用为 0 |
+
+B 的实际输入为“这次请核对当前目录的 orders-b.csv，给出总额、退款、净额和客户汇总。”，未创建输入 JSON 或设置输入环境变量。两个任务入口每次均创建 2 个 Agent 实例，真实读取和写入各一次。包内资产 ID、Agent 定义、执行方案、资源及验证证据相同，仅入口程序中的模式与 manifest 名称不同；各自可独立运行。
+
+输入“取消”和提交空答案均已实测，前后 run 目录数量一致；入口在创建运行记录和任务 Agent 前结束。最终版本的空答案在 TUI 显示“未提交新任务，本次已结束。原任务未执行；可在 TUI 用 /poa fg 再次打开新任务入口。”。
+
+联调摘要：`artifacts/manus/verification-20261112/task-reuse-ux/summary.json`。摘要包含包哈希、原始请求、客观检查结果、调用数量、取消前后目录及会话 ID；独立目录的 B 和重跑 A 记录保存在同目录下的 `runs/`，生成记录保留在 `artifacts/manus/runs/`。
+
+可直接在新的 Brainary TUI 会话验收本次产物：
+
+```text
+/poa fg /Users/notyourkay/Manus-brainary/artifacts/manus/assets/bd5f5a5a-c5fe-4eb2-8a94-26a01d5ce74e/task.poa
+/poa fg /Users/notyourkay/Manus-brainary/artifacts/manus/assets/bd5f5a5a-c5fe-4eb2-8a94-26a01d5ce74e/task-new.poa
+```
+
+两条命令分别运行：第一条直接检查 A 的结果；第二条按第 5 节输入 B 的完整请求，再验证取消行为。验收自行生成的资产时，先运行本分支重新构建的 `dist/manus.poa`；旧包不会自动增加新入口。
+
+H7 开发自测通过，人工验收待用户确认。本分支推送后保留独立，验收后再合入 main；`v1-complete` 保留 V1 基线。V2 尚未启动，届时从 main 另建 `codex/v2-rsi`。

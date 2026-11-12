@@ -1,10 +1,11 @@
 import { strToU8, zipSync } from "fflate";
-import type { TaskPackage } from "./contracts.js";
+import type { TaskEntryMode, TaskPackage } from "./contracts.js";
 import { runNode } from "./files.js";
 
 export function buildTaskArchive(
   pkg: TaskPackage,
   program: string,
+  entryMode: TaskEntryMode = "replay",
 ): Uint8Array {
   const asset = pkg.asset;
   const calls = asset.bundle.steps.reduce(
@@ -15,8 +16,8 @@ export function buildTaskArchive(
     yield_time_ms: calls * asset.config.agentTimeoutMs + 60_000,
     max_output_tokens: 10_000,
   });
-  const main = `// @exec: ${pragma}\nconst MANUS_PACKAGE = ${JSON.stringify(pkg)};\n${program}`;
-  const manifest = `[poa]\nnamespace = "manus"\nname = "task_${asset.assetId}"\nversion = "0.1.0"\nruntime = "codex-v8"\npoa_api_version = 1\nentry = "main.js"\n`;
+  const main = `// @exec: ${pragma}\nconst MANUS_ENTRY_MODE = ${JSON.stringify(entryMode)};\nconst MANUS_PACKAGE = ${JSON.stringify(pkg)};\n${program}`;
+  const manifest = `[poa]\nnamespace = "manus"\nname = "task_${asset.assetId}${entryMode === "new" ? "_new" : ""}"\nversion = "0.1.0"\nruntime = "codex-v8"\npoa_api_version = 1\nentry = "main.js"\n`;
   return zipSync(
     {
       "main.js": strToU8(main),
@@ -42,18 +43,21 @@ export function buildTaskArchive(
   );
 }
 
-export async function exportTaskPackage(
+export async function exportTaskPackages(
   pkg: TaskPackage,
   program: string,
   directory: string,
-): Promise<string> {
-  const archive = buildTaskArchive(pkg, program);
-  const path = `${directory}/task.poa`;
+): Promise<{ replay: string; newTask: string }> {
+  const paths = {
+    replay: `${directory}/task.poa`,
+    newTask: `${directory}/task-new.poa`,
+  };
   await runNode(`
 import { writeFile } from "node:fs/promises";
-await writeFile(${JSON.stringify(path)}, Buffer.from(${JSON.stringify(toBase64(archive))}, "base64"));
+await writeFile(${JSON.stringify(paths.replay)}, Buffer.from(${JSON.stringify(toBase64(buildTaskArchive(pkg, program)))}, "base64"));
+await writeFile(${JSON.stringify(paths.newTask)}, Buffer.from(${JSON.stringify(toBase64(buildTaskArchive(pkg, program, "new")))}, "base64"));
 `);
-  return path;
+  return paths;
 }
 
 function toBase64(bytes: Uint8Array): string {
