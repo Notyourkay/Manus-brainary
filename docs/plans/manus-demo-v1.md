@@ -1,6 +1,6 @@
 # Manus V1 实施计划与人工验收契约
 
-更新：2026-11-12。设计见 ../design/manus-demo-v1.md，操作与签收见 ../acceptance/phase-1.md。采用轻量 SDD，沿用模板的 TypeScript、Vitest、Biome 和 Rolldown。V1 验收收尾完成，阶段标签为 v1-complete；V2 尚未启动。
+更新：2026-11-13。设计见 ../design/manus-demo-v1.md，操作与签收见 ../acceptance/phase-1.md。采用轻量 SDD，沿用模板的 TypeScript、Vitest、Biome 和 Rolldown。V1 验收收尾完成，阶段标签为 v1-complete；V2 尚未启动。
 
 ## 任务 1：自然语言任务理解与生成
 
@@ -28,10 +28,10 @@
 文件：src/task-package.ts、task-main.ts、agent.ts、execution.ts；resources/order-tools.mjs、table-core.mjs；tests/tools.test.ts、task-package.test.ts。
 
 - 任务包保存定义、方案、原始请求、资料快照、脚本、依赖及验证证据。
-- 独立包默认重跑原请求/快照；显式传入新的自然语言任务时，保存的任务 Agent 解释请求，提取本次文件位置并调用真实工具，不再调用生成器。
+- 独立包固定重跑原请求/快照，不读取新任务输入，也不再调用生成器；同类新任务入口暂缓。
 - 工具读取后保存原始内容和哈希，读写回执关联真实实例。重跑使用包内快照。
 
-人工契约 H3：无源码目录运行 task.poa，任务 Agent 实际调用 exec_command 的 read/write，输入和报告有可核对的回执；A/B 得出 14000/1586 分。脚本随包，运行依赖由外部环境提供。
+人工契约 H3：无源码目录运行 task.poa，任务 Agent 实际调用 exec_command 的 read/write，输入和报告有可核对的回执；A 快照重跑得出 14000 分。脚本随包，运行依赖由外部环境提供。
 
 ## 任务 4：客观检查与资产状态
 
@@ -43,7 +43,7 @@
 
 人工契约 H4：正确报告通过检查；错误金额、缺失工具或知识引用失败。历史结果保留，humanAcceptance 不由程序代签。证据为 acceptance、asset-state、完整输入与运行条件。
 
-## 任务 5：真实联调与交接
+## 任务 5：真实联调与交接（2026-11-12 基线）
 
 - [x] lint、typecheck、28 项测试、package 通过。
 - [x] 默认 Brainary 配置下完成无文件任务、含文件位置的自然语言订单任务，以及缺少必要资料后的澄清。
@@ -51,9 +51,9 @@
 - [x] 在现有验收手册中集中记录证据，清理临时调研和历史问题文档。
 - [x] 停在 V1，交用户人工签收。
 
-人工契约 H5：按手册在新会话执行同一包；默认重跑 A 为 14000 分，显式传入同类新请求时 B 净额为 1586 分；请求、资料、知识、工具、检查和状态完整。验收通过后再规划 V2。
+人工契约 H5：按手册在新会话执行同一包，重跑 A 为 14000 分；请求、资料、知识、工具、检查和状态完整。此前 B 复用结果保留为历史证据，新任务入口以任务 7 的当前契约为准。
 
-## 任务 6：V1 验收收尾与发布
+## 任务 6：V1 验收收尾与发布（2026-11-12 基线）
 
 用户于 2026-11-12 确认其余验收内容通过，本轮处理客户汇总测试的语言环境差异和任务包默认入口，完成后推送 GitHub，标记 V1 完成。
 
@@ -65,3 +65,15 @@
 - [x] 提交 V1 代码与文档，推送 main，并创建 `v1-complete` 阶段标签；V2 不启动。
 
 人工契约 H6：中文环境测试通过；新窗口直接运行最新 task.poa，不出现输入框，使用包内原请求/快照完成任务，mode=replay、生成调用为 0。只有显式传入请求时 mode=new；错误金额仍被客观检查拒绝。GitHub main 与 v1-complete 指向本次完成提交。
+
+## 任务 7：恢复任务包直接重跑
+
+分支：`codex/task-reuse-ux`。用户于 2026-11-13 决定撤回双入口方案，暂不提供显式新任务调用。本任务替代此前 H7 双入口验收；历史测试证据保留在 artifacts 中。
+
+- [x] `src/task-package.ts`、`src/main.ts`、`src/contracts.ts`：只导出 task.poa，恢复单包返回值与交付命令，删除入口模式类型及双包模式。
+- [x] `src/task-main.ts`、`src/input.ts`：入口固定 mode=replay，使用 originalRequest 与 originalInput；移除任务包输入读取和新请求解析，保留 Manus 生成输入。`src/records.ts` 更新执行器版本。
+- [x] `tests/input.test.ts`、`tests/task-package.test.ts`：删除撤回功能的测试，保留自然语言生成输入、真实快照和 ZIP 载荷验证；运行 lint、typecheck、test、package。
+- [x] 用更新后的 Manus 导出 A 任务包，在独立目录的新 Brainary 会话运行；即使环境中存在指向 B 的 MANUS_INPUT_FILE，也应无问答重跑 A，净额 14000 分、13 项检查通过、生成调用为 0。
+- [x] 同步现有设计、手册、README；推送本分支并创建到 main 的 PR，停止在待评审状态。V2 后续单独建分支。
+
+人工契约 H7：最新 Manus 每次只导出 task.poa；新会话直接运行，无任务输入框，使用原请求与快照。输入哈希、assetId、Agent 定义和方案与生成时一致，runId 与实例更新，真实工具和验收证据完整。POA_INPUT / MANUS_INPUT_FILE 不改变任务包的请求。旧包需重新生成，显式同类新任务暂不验收。

@@ -1,11 +1,11 @@
 # Manus Demo V1 设计
 
-更新：2026-11-12。状态：V1 验收收尾完成，阶段标签 v1-complete；签收依据与验证证据见验收手册。
+更新：2026-11-13。状态：V1 基线完成；任务包入口按用户反馈收敛为直接重跑，签收依据与验证证据见验收手册。
 运行基线：Brainary、PoA SDK、WM SDK 0.2.0-rc；工程沿用 brainary-poa-template。
 
 ## 1. 目标与范围
 
-Manus 根据任务目标生成可复用的 Agent 定义和执行方法，导出能理解同类新任务的任务 Agent 包。同一任务包在新 Brainary 会话中使用不同材料，调用真实工具完成同类任务，不重新生成定义和方案；同时保留原材料重跑。
+Manus 根据任务目标生成可复用的 Agent 定义和执行方法，导出独立任务包。同一任务包在新 Brainary 会话中直接使用包内原请求与材料快照，调用真实工具完成任务，不重新生成定义和方案。面向用户的同类新任务输入暂缓，后续功能完善后再设计。
 
 V1 包含自然语言任务理解、真实工具场景、简化领域本体、经历查询、人工经验读取、资产状态和客观验收。自动经验提炼、内外层 RSI、候选版本对照与选择属于 V2。
 
@@ -17,7 +17,7 @@ PoA 是控制程序，Agent 定义是可复用数据，运行实例由 SDK 创�
 | --- | --- |
 | 输入与方法分离 | method 保存可复用能力与输入类型；bundle 保存角色、步骤和依赖；request 保存本次完整任务，input 保存实际处理内容；原请求与原材料快照单独保留 |
 | 任务理解 | 外层 Manus 从完整自然语言请求中提炼可复用目标、任务类型与本次资料；仅缺少完成任务必需的信息时追问 |
-| 输入通道 | Manus 用 TUI ask 接收完整任务描述；独立任务包默认直接重跑原请求与快照，无输入等待。POA_INPUT / MANUS_INPUT_FILE 显式传入字符串或 {request} 时执行同类新任务 |
+| 输入通道 | Manus 用 TUI ask 接收完整任务描述，也支持 POA_INPUT / MANUS_INPUT_FILE；task.poa 固定重跑包内原任务，不读取新任务输入 |
 | 真实场景 | 本地订单 CSV 结算核对；同时保留自包含文本任务 |
 | 工具 | 从 Brainary 可用目录选择 exec_command 等能力；任务 Agent 通过 exec_command 调用随包携带的 CSV 读取 / JSON 报告写入脚本 |
 | 工具证据 | 任务脚本自动记录操作参数、Agent ID、输入输出、哈希、时间、结果或错误；Runtime 原生工具事件另作为真实联调证据 |
@@ -28,9 +28,11 @@ PoA 是控制程序，Agent 定义是可复用数据，运行实例由 SDK 创�
 
 生成结果为 ready（method、本次 material、bundle）或 clarify（必要问题）。普通文字任务的 material 可为空，此时直接使用原始任务描述；订单核对任务由模型从描述中提取文件路径。资料不足时经 ask 追问，将补充回答加入同一任务记录后继续生成。
 
-独立任务包不再调用生成器。直接启动使用原请求和包内快照，不再要求用户输入“重跑”或再次描述任务，因此不会停在任务输入框等待。显式传入新请求时，保存的任务 Agent 理解请求并按自身定义选择工具；订单角色从请求中提取文件位置，通过随包 read 工具读取并保存本次材料快照。工具上下文明确用户启动目录，相对路径由 read 工具按该目录解析。请求、文件读取和验收记录均留痕。
+独立任务包不再调用生成器，直接使用原请求和包内快照，不要求输入“重跑”或再次描述任务。任务入口不读取 POA_INPUT / MANUS_INPUT_FILE，也不调用 ask；环境中残留的生成请求不会改变重跑内容。执行仍保存新 run、工具回执、结果和验收记录。
 
-入口选择依据：每次询问会增加误输入与空等；完全删除新输入能力又会失去已验收的同类任务复用。采用默认重跑、显式传入才换任务，保留可复用定义与每次运行分离的资产结构。新请求仍需符合任务包的方法范围，不在执行时重新生成 Agent。
+2026-11-13 入口决定：撤回 task-new.poa 交互入口，显式新任务调用暂缓。可复用定义与原始材料继续分开保存，便于后续接入新的调用方式。已有导出包保留当时程序，需运行更新后的 Manus 才能导出新入口语义的包。
+
+本次在 `codex/task-reuse-ux` 完成修改并创建到 main 的 PR。V2 启动时从届时 main 建立 `codex/v2-rsi`，独立实现 RSI，验收后再集成。
 
 ## 3. 任务与资产契约
 
@@ -39,7 +41,7 @@ PoA 是控制程序，Agent 定义是可复用数据，运行实例由 SDK 创�
 - GeneratedBundle：summary、agents、steps；steps 引用角色、上游结果、验收条件及 knowledgeRefs。每步最多一次修订。
 - TaskAsset：格式版本 2、assetId、method、bundle、固定领域资料、依赖、生成器与执行器版本。
 - TaskPackage：asset、originalRequest、originalInput、任务资源源码、生成时选用的人工经验、已有客观验证证据。资产与原材料在包内分别存为 asset.json、original-input.json。
-- RunRecord：runId、assetId、mode（generate/new/replay）、原始 request、input、context、运行条件、执行结果、客观验收、错误与时间。
+- RunRecord：runId、assetId、mode（当前为 generate/replay，保留历史 new 记录的类型）、原始 request、input、context、运行条件、执行结果、客观验收、错误与时间。
 - AssetState：generated / executed / validated 里程碑、验证运行列表；humanAcceptance 始终由人工填写。
 
 资产不保存运行中的 Agent 实例。任务包重跑产生新 run ID 和实例；定义、方法及 asset ID 保持不变。新增验证结果关联到同一资产，不把一次通过外推为任意材料均可完成。
@@ -59,10 +61,10 @@ CSV 字段为 order_id、customer、status、amount、refund。status 为 paid /
 1. 接收完整自然语言任务，保存原始 request，检索候选领域资料、人工经验与经历。
 2. 外层 Manus 根据请求与工具目录生成内部任务理解、可复用 Agent 定义和方案；只对必要缺项追问。
 3. 保存提取的任务理解；按实际任务类型选择领域上下文，读取模型识别的材料或直接使用任务文本。
-4. 导出 task.poa，状态 generated；包内定义与一次性请求分开保存。
+4. 导出 task.poa，状态 generated；包内定义与原始请求、材料快照分开保存。
 5. 任务 Agent 理解本次请求、调用工具并交付结果，模型检查读取实际工具回执。
 6. 客观检查报告、金额、工具回执、来源及知识引用，保存验收、运行条件、状态与经历索引。
-7. 更新包内原请求快照和验证证据；独立运行默认重跑，显式传入新请求时复用既有定义与方案处理新任务。
+7. 更新包内验证证据；独立运行直接复用既有定义与方案，重跑包内原请求和材料快照。
 
 订单 CSV 是具有客观检查器的验收场景，不是 Manus 的通用输入协议。通用文本任务保持模型检查口径，不冒充客观业务验收。
 
@@ -101,7 +103,7 @@ WM 仍保存 Manus 自定的运行数据并 read_data 导出；wm-snapshot.json 
 
 在现有 src/input、contracts、generator、execution、records、run、task-main、task-package 中完成主流程调整。新增 src/context.ts 负责领域与经验选择，src/validation.ts 负责场景客观检查，src/evidence.ts 读取任务工具证据供模型检查和客观检查共用；resources/ 保存可随包执行的任务与索引脚本，knowledge/ 保存小型领域资料和人工经验，examples/ 保存可验收材料。
 
-沿用 pnpm lint/typecheck/test/package。测试覆盖输入分离、同一方法不同材料、知识选择、真实工具进程、错误回执、客观检查、经历查询、资产状态和打包。真实联调覆盖无需文件的任务、带资料地址的自然语言订单任务，以及同一任务包处理新的自然语言请求和原任务重跑；同一资产生成调用为零，实际工具与结果证据齐全。
+沿用 pnpm lint/typecheck/test/package。测试覆盖输入分离、同一方法不同材料、知识选择、真实工具进程、错误回执、客观检查、经历查询、资产状态和打包。真实联调覆盖无需文件的任务、带资料地址的自然语言订单任务，以及同一任务包在新会话直接重跑原任务；同一资产生成调用为零，实际工具与结果证据齐全。
 
 实施任务与人工契约见 docs/plans/manus-demo-v1.md；操作手册见 docs/acceptance/phase-1.md；自测摘要与证据路径集中在人工验收手册。
 
@@ -130,8 +132,8 @@ WM 仍保存 Manus 自定的运行数据并 read_data 导出；wm-snapshot.json 
 | 项目 | manus.poa | task.poa |
 | --- | --- | --- |
 | 任务资产 | 新建 assetId、Agent 定义与方法 | 保留原 assetId、定义与方法 |
-| 可执行包 | 生成新的 task.poa，写入原请求/快照、资源、依赖和首次验证证据 | 执行已有包，不再导出新包，不改写原 .poa 文件 |
-| 业务结果 | 首次执行结果、订单 report.json 或文本 result.md | 本次重跑或显式新任务的结果 |
+| 可执行包 | 生成 task.poa，写入原请求/快照、资源、依赖和首次验证证据 | 执行已有包，不再导出新包，不改写原 .poa 文件 |
+| 业务结果 | 首次执行结果、订单 report.json 或文本 result.md | 本次原任务重跑的结果 |
 | 运行记录 | 新 runId、实例、输入、上下文、工具回执、检查、轨迹与 WM 读回 | 同样生成全新的运行记录 |
 | 资产状态 | 当前目录保存 asset.json 等资产文件与 asset-state.json | 当前目录保存同一资产的描述与本次验证状态；新验证只写外部记录，不回写原包 |
 

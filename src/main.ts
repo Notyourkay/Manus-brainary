@@ -124,7 +124,7 @@ async function main(): Promise<void> {
     await exportTaskPackage(pkg, taskProgram, journal.paths.assetDirectory);
     await journal.trace({ type: "package_evidence_updated", taskPackage });
     text(
-      `任务包已附本次验证证据：${taskPackage}\n新会话直接运行同一包即可重跑原任务；需要处理同类新任务时，在启动前显式传入完整请求。`,
+      `任务包已附本次验证证据：${taskPackage}\n新会话直接运行即可使用包内原请求与资料快照重跑任务。\n运行命令：/poa fg ${taskPackage}`,
     );
   } catch (error) {
     await journal.fail(error);

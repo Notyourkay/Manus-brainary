@@ -3,11 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  inputCaptureScript,
-  parsePackageRequest,
-  parseUserRequest,
-} from "../src/input.js";
+import { inputCaptureScript, parseUserRequest } from "../src/input.js";
 
 const capture = (kind: "text" | "csv", value: string) =>
   JSON.parse(
@@ -19,14 +15,6 @@ const capture = (kind: "text" | "csv", value: string) =>
   );
 
 describe("natural-language task entry", () => {
-  it("replays by default and changes tasks only with an explicit request", () => {
-    expect(parsePackageRequest(null)).toEqual({ mode: "replay" });
-    expect(parsePackageRequest("重跑原任务")).toEqual({ mode: "replay" });
-    const request = "核对 orders-b.csv 并输出客户净额";
-    expect(parsePackageRequest(request)).toEqual({ mode: "new", request });
-    expect(parsePackageRequest({ request })).toEqual({ mode: "new", request });
-    expect(() => parsePackageRequest({ request: " " })).toThrow("任务描述");
-  });
   it("accepts a complete request without material fields or a file", () => {
     const request = "介绍三个适合初学者的时间管理方法";
     expect(parseUserRequest(request)).toBe(request);

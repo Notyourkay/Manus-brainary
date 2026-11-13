@@ -2,30 +2,22 @@ import { notify } from "@brainary/poa-sdk";
 import { loadContext } from "./context.js";
 import type { TaskPackage } from "./contracts.js";
 import { writeFiles } from "./files.js";
-import { captureInput, readPackageInput } from "./input.js";
 import { RunJournal } from "./records.js";
 import { executeAsset } from "./run.js";
 
 declare const MANUS_PACKAGE: TaskPackage;
 async function main(pkg: TaskPackage): Promise<void> {
-  const request = await readPackageInput();
   const { asset } = pkg;
   const journal = await RunJournal.open(
     asset.method,
     asset.config,
-    request.mode,
+    "replay",
     asset,
   );
   try {
     await writeFiles(`${journal.paths.runDirectory}/resources`, pkg.resources);
-    await journal.setRequest(
-      request.mode === "replay" ? pkg.originalRequest : request.request,
-    );
-    const input =
-      request.mode === "replay"
-        ? pkg.originalInput
-        : await captureInput("text", request.request);
-    await journal.setInput(input);
+    await journal.setRequest(pkg.originalRequest);
+    await journal.setInput(pkg.originalInput);
     const context = await loadContext({
       method: asset.method,
       ...journal.paths,
@@ -42,7 +34,7 @@ async function main(pkg: TaskPackage): Promise<void> {
     await journal.trace({
       type: "asset_reused",
       assetId: asset.assetId,
-      mode: request.mode,
+      mode: "replay",
     });
     notify(
       `复用资产 ${asset.assetId}，直接执行保存的方法。历史经历 ${context.episodes.length} 条。`,

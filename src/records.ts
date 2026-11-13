@@ -12,7 +12,7 @@ import type {
 import { runNode, writeFiles } from "./files.js";
 
 export const GENERATOR_VERSION = "manus-generator-v1.3";
-export const EXECUTOR_VERSION = "manus-executor-v1.3";
+export const EXECUTOR_VERSION = "manus-executor-v1.5";
 const memorySchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "manus-run-v2",

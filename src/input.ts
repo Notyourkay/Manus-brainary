@@ -2,10 +2,6 @@ import { ask, POA_INPUT } from "@brainary/poa-sdk";
 import type { RunInput, TaskMethod } from "./contracts.js";
 import { runNode } from "./files.js";
 
-export type PackageRequest =
-  | { mode: "new"; request: string }
-  | { mode: "replay" };
-
 export async function readRequest(): Promise<string> {
   const supplied = await launchInput();
   return supplied === null
@@ -13,18 +9,6 @@ export async function readRequest(): Promise<string> {
         "请描述你希望完成的任务。已有资料、约束或文件位置可以直接写在这段描述里。",
       )
     : parseUserRequest(supplied);
-}
-
-export async function readPackageInput(): Promise<PackageRequest> {
-  return parsePackageRequest(await launchInput());
-}
-
-export function parsePackageRequest(value: unknown): PackageRequest {
-  if (value == null) return { mode: "replay" };
-  const request = parseUserRequest(value);
-  return /^(重跑原任务|重跑原材料)[。！!]?$/u.test(request)
-    ? { mode: "replay" }
-    : { mode: "new", request };
 }
 
 export async function askForTask(question: string): Promise<string> {
