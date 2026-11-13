@@ -1,6 +1,6 @@
 import { type BrainaryTool, parse_json_reply } from "@brainary/poa-sdk";
 import Ajv, { type JSONSchemaType } from "ajv";
-import type { GeneratedBundle, Review } from "./contracts.js";
+import type { GeneratedBundle } from "./contracts.js";
 
 export const bundleSchema: JSONSchemaType<GeneratedBundle> = {
   type: "object",
@@ -70,19 +70,8 @@ export const bundleSchema: JSONSchemaType<GeneratedBundle> = {
   },
 };
 
-export const reviewSchema: JSONSchemaType<Review> = {
-  type: "object",
-  additionalProperties: false,
-  required: ["passed", "feedback"],
-  properties: {
-    passed: { type: "boolean" },
-    feedback: { type: "string", minLength: 1 },
-  },
-};
-
 const ajv = new Ajv({ allErrors: true, logger: false });
 const validateBundle = ajv.compile(bundleSchema);
-const validateReview = ajv.compile(reviewSchema);
 
 export function parseBundle(
   raw: string,
@@ -102,18 +91,6 @@ export function parseBundle(
     for (const id of step.knowledgeRefs) {
       if (!knownRefs.includes(id)) throw new Error(`未知知识引用：${id}`);
     }
-  }
-  return reply.value;
-}
-
-export function parseReview(raw: string): Review {
-  const reply = parse_json_reply<unknown>(raw);
-  if (reply.error !== null)
-    throw new Error(`检查结果不是有效 JSON：${reply.error}`);
-  if (!validateReview(reply.value)) {
-    throw new Error(
-      `检查结果不符合契约：${ajv.errorsText(validateReview.errors)}`,
-    );
   }
   return reply.value;
 }

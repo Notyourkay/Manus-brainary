@@ -3,6 +3,11 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { validateOrderRun } from "../dist/validation.mjs";
+import {
+  projectWorkingMemory,
+  readWorkingMemory,
+  storeWorkingMemory,
+} from "../dist/working-memory.mjs";
 
 const [directory, originalDirectory] = process.argv.slice(2);
 if (!directory)
@@ -19,11 +24,45 @@ const record = await json("record.json"),
 assert.equal(record.version, 2, "此核查器用于 V1 优化后的格式版本 2 记录");
 assert.equal(record.status, "completed");
 assert.equal(record.execution.status, "completed");
-assert.deepEqual(
-  JSON.parse(snapshot.record),
-  record,
-  "WM 副本必须与最终记录一致",
-);
+if (snapshot.version === 3) {
+  assert.deepEqual(
+    snapshot,
+    storeWorkingMemory(projectWorkingMemory(record, root)),
+    "WM 分区必须对应最终记录",
+  );
+  const wm = readWorkingMemory(snapshot);
+  assert.equal(wm.task.runId, record.runId);
+  assert.ok(
+    record.monitoring.checks.some((c) => c.checkpoint === "plan_completed"),
+  );
+  assert.ok(
+    record.monitoring.checks.some((c) => c.checkpoint === "task_completed"),
+  );
+  assert.ok(!("record" in snapshot));
+  for (const check of record.monitoring.checks) {
+    assert.deepEqual(
+      JSON.parse(await readFile(check.resultRef, "utf8")),
+      check,
+    );
+    const state = JSON.parse(await readFile(check.wmRef, "utf8"));
+    assert.equal(state.task.runId, record.runId);
+    assert.equal(state.metacognition.checkpoint, check.checkpoint);
+    const documents = JSON.parse(await readFile(check.evidenceRef, "utf8"));
+    for (const item of [...check.review.coverage, ...check.review.problems])
+      for (const ref of item.evidenceRefs)
+        assert.ok(
+          ref in documents ||
+            Object.values(documents).some((d) => d.ref === ref),
+          `检查引用缺少实际读回证据：${ref}`,
+        );
+    if (!check.review.passed) {
+      const failed = await json(`checks/${check.id}-failed-wm.json`);
+      assert.equal(failed.metacognition.checkpoint, "check_failed");
+    }
+  }
+  if (record.evaluation) assert.equal(record.rsi.status, "skipped");
+} else
+  assert.deepEqual(JSON.parse(snapshot.record), record, "历史 WM 与记录一致");
 assert.deepEqual(input, record.input);
 assert.equal(
   createHash("sha256").update(input.content).digest("hex"),
@@ -43,6 +82,26 @@ assert.ok(
 for (const event of trace) {
   assert.equal(event.runId, record.runId);
   assert.equal(event.assetId, record.assetId);
+}
+if (snapshot.version === 3) {
+  for (const check of record.monitoring.checks) {
+    const consumed = trace.find(
+      (e) => e.type === "agent_input" && e.agentId === check.reviewerId,
+    );
+    assert.ok(consumed, "检查必须存在实际 Agent 输入");
+    const message = JSON.parse(consumed.message);
+    assert.deepEqual(
+      message.workingMemory,
+      JSON.parse(await readFile(check.wmRef, "utf8")),
+    );
+    assert.deepEqual(
+      message.documents,
+      JSON.parse(await readFile(check.evidenceRef, "utf8")),
+    );
+  }
+  const completion = record.monitoring.checks.at(-1);
+  assert.equal(completion.checkpoint, "task_completed");
+  assert.equal(completion.review.passed, true);
 }
 const requested = trace.filter((event) => event.type === "agent_requested");
 const created = trace.filter((event) => event.type === "agent_created");

@@ -9,7 +9,7 @@ export function buildTaskArchive(
   const asset = pkg.asset;
   const calls = asset.bundle.steps.reduce(
     (total, step) => total + 2 * (step.maxRevisions + 1),
-    0,
+    2,
   );
   const pragma = JSON.stringify({
     yield_time_ms: calls * asset.config.agentTimeoutMs + 60_000,

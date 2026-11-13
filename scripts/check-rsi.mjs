@@ -54,6 +54,12 @@ for (const target of ["inner", "outer"]) {
         arm,
         caseId: test.id,
       });
+      if (evidence.record.monitoring && evidence.record.status !== "error") {
+        assert.equal(evidence.record.rsi.status, "skipped");
+        assert.deepEqual(evidence.record.rsi.reasons, [
+          "评估运行不递归触发 RSI",
+        ]);
+      }
       assert.equal(evidence.record.request, test.request);
       assert.equal(row.inputSha256, test.input.sha256);
       assert.deepEqual(evidence.record.context, context);
@@ -96,6 +102,27 @@ for (const target of ["inner", "outer"]) {
 }
 for (const [path, digest] of Object.entries(source.hashes))
   assert.equal(hash(await readFile(path)), digest, `原资产被改变：${path}`);
+if (source.record.rsi?.status === "running") {
+  const current = JSON.parse(
+    await readFile(join(source.directory, "record.json"), "utf8"),
+  );
+  assert.equal(current.rsi.status, "completed");
+  assert.equal(current.rsi.cycleId, result.cycleId);
+  assert.equal(current.rsi.directory, root);
+  const snapshot = JSON.parse(
+    await readFile(join(source.directory, "wm-snapshot.json"), "utf8"),
+  );
+  assert.equal(snapshot.task.entries[0].value.runId, source.record.runId);
+  assert.equal(snapshot.rsi.entries[0].value.cycleId, result.cycleId);
+  const trace = (await readFile(join(source.directory, "trace.jsonl"), "utf8"))
+    .trim()
+    .split("\n")
+    .map(JSON.parse);
+  assert.equal(
+    trace.filter((e) => e.type === "automatic_rsi_started").length,
+    1,
+  );
+}
 const files = unzipSync(await readFile(result.selectedPackage));
 const asset = JSON.parse(strFromU8(files["asset.json"]));
 assert.equal(asset.assetId, result.selectedAssetId);

@@ -9,7 +9,9 @@ import { writeFiles } from "./files.js";
 import { type GenerationResult, generateBundle } from "./generator.js";
 import { askForTask, captureInput, contextHint } from "./input.js";
 import { RunJournal } from "./records.js";
+import { runAutomaticRsi } from "./rsi/automatic.js";
 import { defaultStrategy } from "./rsi/contracts.js";
+import { runCycle } from "./rsi/cycle.js";
 import { loadLearning } from "./rsi/store.js";
 import { executeAsset } from "./run.js";
 import { exportTaskPackage } from "./task-package.js";
@@ -142,6 +144,7 @@ export async function generateTask(request: string): Promise<void> {
     text(
       `任务包已附本次验证证据：${taskPackage}\n新会话直接运行即可使用包内原请求与资料快照重跑任务。\n运行命令：/poa fg ${taskPackage}`,
     );
+    await runAutomaticRsi(journal, runCycle);
   } catch (error) {
     await journal.fail(error);
     if (pkg) await journal.saveAsset(pkg, true);

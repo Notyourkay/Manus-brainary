@@ -30,10 +30,14 @@ import {
   readSource,
 } from "./store.js";
 
-export async function runCycle(sourceDirectory: string): Promise<void> {
+export async function runCycle(
+  sourceDirectory: string,
+  onStart?: (cycle: { cycleId: string; directory: string }) => Promise<void>,
+): Promise<void> {
   const source = await readSource(sourceDirectory);
   const cycle = await openCycle(source.pkg.asset.config.artifactRoot);
   const { cycleId, directory } = cycle;
+  await onStart?.(cycle);
   let stage = "prepare";
   const save = async (name: string, value: unknown) =>
     writeFiles(directory, { [name]: JSON.stringify(value, null, 2) });

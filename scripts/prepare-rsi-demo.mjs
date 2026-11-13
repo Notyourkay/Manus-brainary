@@ -10,12 +10,14 @@ const root = resolve(
 await mkdir(dirname(root), { recursive: true });
 await mkdir(root);
 const memoryRoot = join(root, "artifacts/manus");
+const correctionDemo = process.argv[3] === "correction";
 const strategy = {
-  id: "demo-human-two-step-v1",
+  id: correctionDemo ? "demo-human-correction-v1" : "demo-human-two-step-v1",
   parentId: null,
   scenario: "order-audit",
-  instructions:
-    "这是人工编写的旧版演示策略，用于真实比较流程冗余。订单核对必须生成两个顺序步骤：第一步由无工具的规则整理角色重述本次领域规则及核对清单，既不计算也不声称已读取数据；它的验收条件只检查清单完整。第二步由持有 exec_command 的对账角色实际 read、计算、write 并交付报告，inputFrom 引用第一步。两步均 maxRevisions=0，引用全部规则。不要把第一步合并进第二步。",
+  instructions: correctionDemo
+    ? "这是人工编写的故障注入策略，仅用于验证元认知纠偏和自动 RSI。生成单个持有 exec_command 的订单角色、单个 maxRevisions=1 的步骤，步骤验收仍要求完整 read/计算/write 与全部领域规则。角色 systemPrompt 明确写入这条测试行为：初次调用即使有 planGuidance 也只回复‘尚未执行订单读取与报告写入’，不调用工具；只有收到包含 previousOutput 和 feedback 的修订请求时才正常执行 read、按全部规则计算、write 并交付报告。保留可复用定义，不固定路径或数值。不让生成器代做任务或伪造检查结果。"
+    : "这是人工编写的旧版演示策略，用于真实比较流程冗余。订单核对必须生成两个顺序步骤：第一步由无工具的规则整理角色重述本次领域规则及核对清单，既不计算也不声称已读取数据；它的验收条件只检查清单完整。第二步由持有 exec_command 的对账角色实际 read、计算、write 并交付报告，inputFrom 引用第一步。两步均 maxRevisions=0，引用全部规则。不要把第一步合并进第二步。",
   sourceRunIds: [],
   createdAt: new Date().toISOString(),
 };
@@ -43,8 +45,9 @@ await writeFile(
       memoryRoot,
       requestFile,
       strategy,
-      description:
-        "人工旧策略；运行、工具结果与 RSI 收益均由后续真实执行产生。",
+      description: correctionDemo
+        ? "人工故障注入策略；真实模型首轮不执行，检查后修订；检查与回执均由实际运行产生。"
+        : "人工旧策略；运行、工具结果与 RSI 收益均由后续真实执行产生。",
     },
     null,
     2,
@@ -52,5 +55,5 @@ await writeFile(
 );
 const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`;
 console.log(
-  `演示目录：${root}\n人工旧策略：${strategy.id}\n\n执行：\ncd ${quote(root)}\nexport MANUS_MEMORY_ROOT=${quote(memoryRoot)}\nunset MANUS_INPUT_FILE\n/Users/notyourkay/brainary-rc-0.2.0/bin/brainary --add-dir ${quote(repo)}\n\nTUI：\n/poa fg ${join(repo, "dist/manus.poa")}\n\n选择“执行新任务”，输入：\n${request}\n\n完成后记下运行目录，在同一 TUI 再运行：\n/poa fg ${join(repo, "dist/manus.poa")}\n选择“复盘改进已有任务”，填入来源运行目录。生成与 RSI 共用 Manus 入口。`,
+  `演示目录：${root}\n人工旧策略：${strategy.id}\n\n执行：\ncd ${quote(root)}\nexport MANUS_MEMORY_ROOT=${quote(memoryRoot)}\nunset MANUS_INPUT_FILE\n/Users/notyourkay/brainary-rc-0.2.0/bin/brainary --add-dir ${quote(repo)}\n\nTUI：\n/poa fg ${join(repo, "dist/manus.poa")}\n\n选择“执行新任务”，输入：\n${request}\n\n发现失败、纠偏或有依据的冗余时，任务结束后会自动运行一轮 RSI；无需再次输入。完成后记下运行目录。如需主动复盘，可在同一 TUI 再运行：\n/poa fg ${join(repo, "dist/manus.poa")}\n选择“复盘改进已有任务”，填入来源运行目录。生成与 RSI 共用 Manus 入口。`,
 );

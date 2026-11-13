@@ -63,6 +63,10 @@ const main = {
 export default defineConfig([
   main,
   {
+    input: "src/working-memory.ts",
+    output: { file: "dist/working-memory.mjs", format: "esm" },
+  },
+  {
     input: "src/rsi/comparison.ts",
     output: { file: "dist/rsi-comparison.mjs", format: "esm" },
   },

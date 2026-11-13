@@ -1,10 +1,10 @@
 # Manus on Brainary
 
-Manus 根据用户任务生成任务 Agent 与执行方案，通过 Brainary SDK 创建实例并执行。统一入口 `dist/manus.poa` 在 Brainary TUI 前台运行，内部提供生成执行和 RSI 复盘改进两种操作。
+Manus 根据用户任务生成任务 Agent 与执行方案，通过 Brainary SDK 创建实例并执行。统一入口 `dist/manus.poa` 在 Brainary TUI 前台运行，任务内根据 WM 状态做元认知检查和纠偏，结束后按证据自动运行一轮内部 RSI，也保留主动复盘操作。
 
 V1 支持自然语言生成、任务包直接重跑、真实工具、简化领域本体、经历查询与人工经验读取。任务方法与每次材料分开，资产分别记录生成、执行、客观验证和人工签收状态。订单 CSV 结算核对是完整验收场景。V1 已完成。V2 在 `codex/v2-rsi` 增加自动经验提炼、任务 Agent/方案改进、生成策略改进、固定用例真实对照和版本选择；开发及真实联调已完成，等待人工验收。操作和证据集中在各阶段人工验收手册。
 
-当前任务包固定使用包内原请求与材料快照，不再提供新任务交互或显式新输入入口。V2 沿用这一入口，RSI 模块由 Manus 主入口调用，每次运行一轮改进。
+当前任务包固定使用包内原请求与材料快照，不再提供新任务交互或显式新输入入口。V2 沿用这一入口，RSI 模块由 Manus 主入口调用，每次运行至多一轮改进；无改进证据的成功任务直接结束。
 
 ## 开发依据
 
@@ -67,6 +67,8 @@ src/generator.ts   生成 Agent 与提示词
 src/execution.ts   按生成的步骤、依赖和修订策略执行
 src/agent.ts       SDK 创建、等待、读取结果与关闭
 src/records.ts     记录、轨迹、资产状态与 WM 读回
+src/working-memory.ts 六分区 WM 的结构与文件引用
+src/metacognition.ts 基于 WM 和证据的方案、步骤、结束检查
 src/context.ts     选择领域资料、人工/自动经验与经历
 src/rsi/           复盘、评估、确定性选择、版本与经验发布
 src/validation.ts  订单结果与工具证据的客观检查
@@ -94,7 +96,7 @@ RSI 复用现有生成器与执行器。内层修改任务 Agent 定义和步骤
 
 `task.poa` 使用包内原请求与资料快照，无需输入，也不因环境中残留的新请求而改变任务。用 `node scripts/check-run.mjs <运行目录> [原生成运行目录]` 核对客观结果、工具证据、资产一致、新实例与零次生成调用。此前导出的包包含当时的执行器，使用新行为需重新运行更新后的 Manus 生成任务包。
 
-Manus 包会生成新资产及 task.poa；任务包只执行已有资产，保存本次业务结果、运行记录和资产状态，不再导出新包。两者都执行结果检查；角色/实例数量与检查规范见设计文档第 10—11 节。
+Manus 包会生成新资产及 task.poa；任务包只执行已有资产，保存本次业务结果、运行记录和资产状态，不再导出新包。两者都执行元认知检查，完整轨迹和工具回执在文件中；WM 的 task/generation/execution/metacognition/evidence/rsi 分区保存关键状态与引用，每区使用 SDK Map 的 current 条目。V2 检查与触发规范见 V2 设计第 7 节。
 
 经历索引默认使用当前 `artifacts/manus`；跨目录共享可设置 `MANUS_MEMORY_ROOT`，启动 Brainary 时同时用 `--add-dir <记忆根目录>` 允许更新共享索引。用 `MANUS_EXPERIENCE_FILE` 指向人工维护的经验 JSON，实际读取的来源、版本和内容会写入 `context.json`。V2 将已通过对照的自动经验和生成策略保存在 `<memoryRoot>/learning/state.json`，后续 Manus 生成时按场景读取并记录实际版本。
 
@@ -104,7 +106,7 @@ Manus 包会生成新资产及 task.poa；任务包只执行已有资产，保�
 /poa fg /Users/notyourkay/Manus-brainary/dist/manus.poa
 ```
 
-选择“复盘改进已有任务”，输入一个已有订单运行目录 `.../runs/<runId>`。RSI 读取真实执行记录，提出内外层候选，完成八次对照运行，导出 `rsi/<cycleId>/selected/task.poa` 并显示采用或保留的原因。新包仍直接重跑原任务。原资产保持不变；选中的生成策略作用于下一次 Manus 生成。
+任务结束后，存在检查失败、纠偏、客观失败或有证据支持的冗余步骤时，Manus 自动进入一轮 RSI。独立 task.poa 只记录建议，评估运行不递归触发。也可选择“复盘改进已有任务”，输入一个已有订单运行目录 `.../runs/<runId>`。RSI 读取真实执行记录，提出内外层候选，完成八次对照运行，导出 `rsi/<cycleId>/selected/task.poa` 并显示采用或保留的原因。新包仍直接重跑原任务。原资产保持不变；选中的生成策略作用于下一次 Manus 生成。
 
 ```bash
 node scripts/prepare-rsi-demo.mjs

@@ -61,7 +61,7 @@
 
 文件：src/main.ts、src/input.ts、src/generate.ts、rolldown.config.mjs、scripts/package.mjs、scripts/prepare-rsi-demo.mjs、tests/input.test.ts；删除 src/rsi-main.ts。
 
-- [x] 更新设计及人工契约：一个 Manus 应用，内部选择生成执行或 RSI，RSI 保持按需的一轮评估。
+- [x] 更新设计及人工契约：一个 Manus 应用，内部选择生成执行或 RSI，保留主动的一轮评估入口（自动触发由任务 8 接入）。
 - [x] 将现有生成流程移至 generateTask(request)，主入口按 readLaunch() 的 generate/rsi 结果调用内部模块。
 - [x] 保留自然语言启动输入，增加统一的 `{action:"rsi",sourceDirectory}` 输入；无输入时用 SDK ask 选择操作。
 - [x] 移除独立 RSI 构建和打包，正常 package 时清除旧输出，演示脚本与手册都只指向 manus.poa。
@@ -69,3 +69,26 @@
 - [x] 将证据补充到现有手册，推送 codex/v2-rsi，等待人工验收。
 
 人工契约 V2-H6：构建后只有一个 Manus 应用包。在 TUI 运行同一 manus.poa，能分别选择并完成新任务和已有运行复盘；后者输出完整的 comparison/result 和选中 task.poa，check-rsi 通过。原 task.poa 仍直接重跑，不出现 Manus 操作菜单。
+
+## 任务 7：WM 逻辑分区与可追溯检查
+
+文件：src/working-memory.ts、src/metacognition.ts、src/contracts.ts、src/records.ts、src/execution.ts、src/run.ts；tests/working-memory.test.ts、tests/metacognition.test.ts、tests/execution.test.ts；scripts/check-run.mjs。
+
+- [x] 定义六分区 WM 和检查数据契约，save 写完整文件与精简 WM，检查输入由 SDK 读回及其证据引用构建。
+- [x] 在方案、步骤尝试、检查失败与结束节点保存状态及证据；检查器输出目标覆盖、进展、问题。
+- [x] 方案反馈进入任务消息，步骤失败至多修订一次，最终客观失败不能被模型覆盖。
+- [x] 测试分区投影、模型输出边界、真实执行器纠偏及停止；核查脚本兼容历史快照，验证检查文件引用和轨迹对应。
+
+人工契约 V2-H7：wm-snapshot.json 不含 record 字符串，六区可分别查看；checks 的输入快照与真实 WM 对应，包含方案、步骤、失败、结束节点；能沿证据引用定位真实输入/输出/回执，失败反馈确实进入后续纠偏消息。
+
+## 任务 8：结束后按证据自动触发 RSI
+
+文件：src/rsi/trigger.ts、src/rsi/automatic.ts、src/rsi/cycle.ts、src/rsi/proposal.ts、src/generate.ts、src/run.ts；tests/rsi-trigger.test.ts；README.md、docs/acceptance/phase-2.md。
+
+- [x] 实现固定触发规则，保存理由与来源检查；正常无信号任务跳过，单个 Manus 运行最多一轮。
+- [x] 任务结束并导出后调用内部 RSI；对照运行禁止递归，独立重跑只记录建议；保留统一入口主动复盘。
+- [x] 自动周期完成/失败后保存来源状态，恢复来源 WM；RSI 错误与原任务结果分离。
+- [x] 测试触发、无信号跳过、评估/重跑隔离、一次周期及失败保持原结果；真实联调覆盖自动周期和正常跳过，记录指标。
+- [x] 更新手册和证据，完成 lint/typecheck/test/package，提交推送 codex/v2-rsi，停止等待人工验收。
+
+人工契约 V2-H8：只运行 manus.poa 并输入一次任务即可在有证据时进入一轮 RSI；rsi 决定能定位检查与实验目录。八个对照都显示 evaluation 跳过，不生成子周期。无信号成功任务不复盘；自动周期失败不改变原任务验收。手动复盘仍可从同一入口使用。

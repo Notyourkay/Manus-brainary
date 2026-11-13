@@ -30,17 +30,57 @@ function scriptedRunner(replies: string[]) {
     if (reply === undefined) throw new Error("发生了预期外的 Agent 调用");
     return { agentId: `instance-${calls.length}`, text: reply };
   };
-  return { run, calls };
+  const review = async () => {
+    const reply = await run(
+      {
+        id: "manus-reviewer",
+        name: "检查",
+        systemPrompt: "",
+        knowledge: [],
+        tools: [],
+      },
+      "review",
+    );
+    return { review: JSON.parse(reply.text), reviewerId: reply.agentId };
+  };
+  return { run, calls, review };
 }
 
 describe("generated plan execution", () => {
+  it("passes plan correction into execution without rewriting the reusable bundle", async () => {
+    const bundle = parseBundle(JSON.stringify(fixture), []);
+    const before = JSON.stringify(bundle);
+    const agent = scriptedRunner(["要求 A、B", passed, "最终答案", passed]);
+    await executeBundle(
+      task,
+      bundle,
+      agent.run,
+      agent.review,
+      () => {},
+      async () => {},
+      "确保结果覆盖要求 B",
+    );
+    expect(JSON.parse(agent.calls[0].message).planGuidance).toBe(
+      "确保结果覆盖要求 B",
+    );
+    expect(JSON.parse(agent.calls[2].message).planGuidance).toBe(
+      "确保结果覆盖要求 B",
+    );
+    expect(JSON.stringify(bundle)).toBe(before);
+  });
   it("uses generated roles and passes upstream results into the next step", async () => {
     const bundle = parseBundle(JSON.stringify(fixture), []);
     const agent = scriptedRunner(["要求 A、B", passed, "最终答案", passed]);
     const progress: StepRecord[] = [];
-    const result = await executeBundle(task, bundle, agent.run, (step) => {
-      progress.push(step);
-    });
+    const result = await executeBundle(
+      task,
+      bundle,
+      agent.run,
+      agent.review,
+      (step) => {
+        progress.push(step);
+      },
+    );
     expect(result.status).toBe("completed");
     expect(result.finalOutput).toBe("最终答案");
     expect(agent.calls[0].definition).toEqual(bundle.agents[0]);
@@ -60,6 +100,7 @@ describe("generated plan execution", () => {
       task,
       parseBundle(JSON.stringify(changed), []),
       agent.run,
+      agent.review,
       () => {},
     );
     expect(agent.calls.map((call) => call.definition.id)).toEqual([
@@ -83,6 +124,7 @@ describe("generated plan execution", () => {
       task,
       parseBundle(JSON.stringify(fixture), []),
       agent.run,
+      agent.review,
       () => {},
     );
     expect(result.status).toBe("completed");
@@ -102,6 +144,7 @@ describe("generated plan execution", () => {
       task,
       parseBundle(JSON.stringify(fixture), []),
       agent.run,
+      agent.review,
       () => {},
     );
     expect(result.status).toBe("failed");
@@ -119,12 +162,14 @@ describe("generated plan execution", () => {
       { ...task, material: { kind: "text", value: "材料甲" } },
       bundle,
       first.run,
+      first.review,
       () => {},
     );
     await executeBundle(
       { ...task, material: { kind: "text", value: "材料乙" } },
       bundle,
       second.run,
+      second.review,
       () => {},
     );
     expect(JSON.parse(first.calls[0].message).material.value).toBe("材料甲");
@@ -139,6 +184,7 @@ describe("generated plan execution", () => {
       task,
       parseBundle(JSON.stringify(fixture), []),
       agent.run,
+      agent.review,
       () => {},
     );
     expect(result.steps[1].attempts).toHaveLength(1);

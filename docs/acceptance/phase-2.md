@@ -1,10 +1,10 @@
 # Manus V2 人工验收手册
 
-更新：2026-11-13。开发分支 `codex/v2-rsi`。本手册对应 V2-H1—H6，记录操作、预期和实际证据；人工签收由用户完成。
+更新：2026-11-13。开发分支 `codex/v2-rsi`。本手册对应 V2-H1—H8，记录操作、预期和实际证据；人工签收由用户完成。
 
 ## 1. 展示内容
 
-`manus.poa` 是统一入口。选择“执行新任务”生成并执行任务 Agent；选择“复盘改进已有任务”则由内部 RSI 模块对已有订单运行进行一轮复盘，分别改进任务 Agent/方案和生成策略，真实运行基线与候选，再决定采用或保留。输出的 `selected/task.poa` 继续无需输入地重跑原任务。
+`manus.poa` 是统一入口。选择“执行新任务”生成并执行任务 Agent，结束后按元认知证据自动决定是否运行一轮 RSI；选择“复盘改进已有任务”则由内部 RSI 模块对已有订单运行进行一轮复盘，分别改进任务 Agent/方案和生成策略，真实运行基线与候选，再决定采用或保留。输出的 `selected/task.poa` 继续无需输入地重跑原任务。
 
 本轮用订单结算验证完整 RSI：同一轮中有四次内层执行和四次外层生成执行。外层的 C 材料未提供给复盘 Agent。普通文本任务仍可生成，但 V2 自动选择的验收范围是具有固定客观检查器的订单结算。
 
@@ -51,11 +51,11 @@ cd /Users/notyourkay/Manus-brainary
 node scripts/check-run.mjs <基线运行目录>
 ```
 
-预期 `verified: true`，一次生成调用，通常共五次 Agent 调用（生成一次，两个任务步骤各执行和检查一次），两次业务工具调用。
+预期 `verified: true`，一次生成调用，通常共七次 Agent 调用（生成一次、方案/结束检查各一次、两个任务步骤各执行和检查一次），两次业务工具调用。
 
-## 4. 启动并检查一轮 RSI
+## 4. 自动 RSI 与主动复盘
 
-在刚才的 TUI 中运行：
+若任务结束后按检查证据自动启动了 RSI，直接查看下方的进度和产物。也可在刚才的 TUI 中主动运行：
 
 ```text
 /poa fg /Users/notyourkay/Manus-brainary/dist/manus.poa
@@ -71,8 +71,8 @@ TUI 依次显示复盘和 `inner/outer`、`baseline/candidate`、用例 ID。运
 
 | 对照 | 基线 | 候选 | 采用条件 |
 | --- | --- | --- | --- |
-| 内层 source/B | 2/2 通过，通常 8 次 Agent 调用 | 2/2 通过，通常 4 次调用 | 每个用例调用不增加且总调用减少 |
-| 外层 B/C | 2/2 通过，通常 10 次 Agent 调用 | 2/2 通过，通常 6 次调用 | 同上，调用数包含实际生成 |
+| 内层 source/B | 2/2 通过，通常 12 次 Agent 调用 | 2/2 通过，通常 8 次调用 | 每个用例调用不增加且总调用减少 |
+| 外层 B/C | 2/2 通过，通常 14 次 Agent 调用 | 2/2 通过，通常 10 次调用 | 同上，调用数包含实际生成 |
 
 每个用例都要通过固定的 13 项客观检查。实际重试也计入调用数；模型结果有变化时以真实证据为准。修复基线失败且候选全通过也可采用；平局、退化或条件不一致保留基线。耗时只展示，不据此判定收益。
 
@@ -198,5 +198,49 @@ node scripts/check-rsi.mjs .local/v2-unified-entry-20261113/artifacts/manus/rsi/
 | V2-H4 | 选中任务包在新会话直接执行；外层策略作用于后续生成 | pending |
 | V2-H5 | 采用与保留分支、联调证据和操作可复现 | pending |
 | V2-H6 | 构建只有一个 Manus 应用包；同一入口可完成生成执行和内部 RSI；task.poa 直接重跑 | pending |
+| V2-H7 | 六区 WM、四类更新节点、检查读回与证据引用、实际纠偏 | pending |
+| V2-H8 | 自动一轮、无信号跳过、评估不递归、来源 WM 恢复、主动复盘保留 | pending |
 
 本分支完成后等待用户人工验收，不自动合并 main。
+
+## 10. WM 与自动 RSI 验收（本次调整）
+
+运行正常订单请求后查看 runs/<id>/wm-snapshot.json：task/generation/execution/metacognition/evidence/rsi 六区分别显示状态与引用（每区 entries[0].value），不再有 record 字符串。完整过程查看 trace.jsonl、tool-calls.jsonl、metacognition.json 和 checks/。检查输入快照来自 WM read_data；检查输出包括 coverage、progress、problems，证据引用可打开。
+
+仍使用第 3 节的两步旧策略演示；检查器若判断规则重述构成冗余，应在任务结束后自动进入 RSI，无需再次选菜单。若未发现需要改进的证据，rsi.reason 应说明跳过原因，仍可按第 4 节主动复盘。普通一步成功任务应直接结束。新的总调用指标包含方案检查和完成检查，以 comparison 中实际 trace 计数为准，不使用历史证据的调用常数。
+
+- V2-H7：方案结束、步骤结束、失败、任务结束均有状态更新；有失败时检查反馈进入下一次尝试，依赖步骤仅在通过后执行。完成后的客观检查与模型判断分别保存。
+- V2-H8：来源 record.rsi 与 WM rsi 对应同一个 cycle；运行 check-rsi 验证八个对照及选择。各评估运行 record.rsi.reason 为评估运行不递归。自动周期结束后 WM 恢复来源 runId，原任务状态不被评估状态替换。
+
+V2-H7、V2-H8 人工签收为 pending。
+
+### 复现任务内纠偏与自动触发
+
+为稳定验收失败分支，使用隔离的人工故障注入策略（不写入日常记忆）：
+
+```bash
+node scripts/prepare-rsi-demo.mjs .local/my-correction-demo correction
+```
+
+照脚本打印的环境与命令启动 Brainary，运行 manus.poa 并输入打印的订单请求。这份策略要求任务 Agent 初次只声明尚未执行，收到检查反馈后才实际 read/计算/write；步骤 maxRevisions=1。它只注入待测行为，失败检查、修订输出、回执和指标全部来自真实模型执行。
+
+预期：方案检查可能提前指出该问题；第一次步骤检查必须判未完成，保存 check_failed 的 WM，随后 step_revision 把反馈传回同一角色的新实例。第二次应产生真实读写回执并通过 13 项客观检查。任务结束后，无需另发命令即可自动进入一轮 RSI。检查 record.monitoring.revisions、record.rsi.sourceChecks 与 cycleId，以及 trace 中的 plan_correction/step_revision/automatic_rsi_started；八个评估均不继续触发 RSI。完成后运行 check-run 和 check-rsi。若模型产生不同结果，按实际失败/采用记录定位，不把预期当作证据。
+
+### 本次真实联调证据
+
+- 无触发信号的运行：`.local/v2-wm-auto-20261113/artifacts/manus/runs/1ded9795-abc0-4401-9ebd-33dc330f120c`。两步正常执行，4 次元认知检查，7 次总 Agent 调用，2 次工具调用，13/13 客观检查通过；rsi.status=skipped，理由为没有失败、纠偏或冗余证据。check-run 通过。
+- 真实纠偏与自动启动：`.local/v2-wm-correction-20261113/artifacts/manus/runs/7637be8d-5f66-4e5f-9432-cef38ebdffed`。plan_completed → step_completed 失败 → check_failed 状态更新 → 唯一一次 step_revision → step_completed 通过 → task_completed 通过；7 次总 Agent 调用、2 次真实工具调用、13/13 客观检查通过。check-2-failed-wm.json 保存失败现场；trace 的下一次任务输入包含 previousOutput 与原检查反馈。来源检查触发 cycle `92768fca-96f4-4de3-b50a-0ed67c72cc4e`，无需用户另发 RSI 命令。
+
+联调曾发现模型抄写长路径产生错误运行 ID。最终接口改为模型使用短证据标识、程序解析到真实文件，检查器仍只接受本次实际读回的资料。旧失败记录 `663f4dca-3117-421a-9b87-f70b2e2bce8c` 保留在隔离目录，不作为通过证据。
+
+独立任务包复验：`.local/v2-wm-replay-20261113/artifacts/manus/runs/116b4799-e11c-4f3f-9cca-d8c9513098f5`，在新工作目录和新 Brainary 会话运行复制的原 task.poa，无输入、0 次生成、6 次 Agent 调用、2 次工具调用，13/13 检查通过。原 Agent 定义不变，实际实例全新；一轮修订后 rsi.status=recommended，cycleId 为空，没有自动实验。与来源运行联合执行 check-run 已通过。
+
+自动周期 `92768fca-96f4-4de3-b50a-0ed67c72cc4e` 已完成，八个评估运行均 13/13 客观通过。内层调用 12→10、外层调用 14→10，均采用候选并发布 2 条经验。内层 B 候选还出现过真实计算遗漏，元认知从输入和 read/write 回执发现客户净额错误并要求修正；额外修订调用已计入上述指标。所有评估 record.rsi.status=skipped；来源轨迹只有一次 automatic_rsi_started，结束后来源 record.rsi.status=completed，WM 恢复到来源 runId，并关联同一 cycleId。原资产哈希不变。check-rsi 与来源/独立重跑的 check-run 全部返回 verified: true。
+
+```bash
+node scripts/check-run.mjs .local/v2-wm-correction-20261113/artifacts/manus/runs/7637be8d-5f66-4e5f-9432-cef38ebdffed
+node scripts/check-rsi.mjs .local/v2-wm-correction-20261113/artifacts/manus/rsi/92768fca-96f4-4de3-b50a-0ed67c72cc4e
+node scripts/check-run.mjs .local/v2-wm-replay-20261113/artifacts/manus/runs/116b4799-e11c-4f3f-9cca-d8c9513098f5 .local/v2-wm-correction-20261113/artifacts/manus/runs/7637be8d-5f66-4e5f-9432-cef38ebdffed
+```
+
+本次 lint、typecheck、47 个自动测试、package 全部通过。校验摘要与最终构建哈希保存在 `.local/v2-wm-correction-20261113/verification.json`。自动测试同时验证无信号跳过、评估隔离、一个来源不重复启动周期、自动周期失败时保留原任务结果。代码推送 `codex/v2-rsi`，等待用户人工签收。

@@ -10,21 +10,18 @@ import type {
   Verification,
 } from "./contracts.js";
 import { runNode, writeFiles } from "./files.js";
+import { emptyMonitoring, type Monitoring } from "./monitoring.js";
+import {
+  memorySchema,
+  projectWorkingMemory,
+  readWorkingMemory,
+  type StoredWorkingMemory,
+  storeWorkingMemory,
+  type WorkingMemory,
+} from "./working-memory.js";
 
 export const GENERATOR_VERSION = "manus-generator-v2.0";
-export const EXECUTOR_VERSION = "manus-executor-v2.0";
-const memorySchema = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "manus-run-v2",
-  type: "object",
-  additionalProperties: false,
-  required: ["run_id", "asset_id", "record"],
-  properties: {
-    run_id: { type: "string" },
-    asset_id: { type: "string" },
-    record: { type: "string" },
-  },
-};
+export const EXECUTOR_VERSION = "manus-executor-v2.1";
 export interface RunPaths {
   runId: string;
   assetId: string;
@@ -36,7 +33,7 @@ export interface RunPaths {
 export class RunJournal {
   private constructor(
     readonly paths: RunPaths,
-    readonly record: RunRecord,
+    readonly record: RunRecord & { monitoring: Monitoring },
     private readonly memory: PoA,
   ) {}
   static async open(
@@ -61,8 +58,9 @@ console.log(JSON.stringify({
 `),
     );
     const paths: RunPaths = environment.paths;
-    const record: RunRecord = {
+    const record: RunRecord & { monitoring: Monitoring } = {
       version: 2,
+      monitoring: emptyMonitoring(),
       runId: paths.runId,
       assetId: paths.assetId,
       mode,
@@ -136,13 +134,23 @@ await appendFile(${JSON.stringify(`${this.paths.runDirectory}/trace.jsonl`)},${J
 `);
   }
   async save(): Promise<void> {
-    const record = JSON.stringify(this.record, null, 2);
-    await writeFiles(this.paths.runDirectory, { "record.json": record });
-    await this.memory.load_data(Kind.WM, {
-      run_id: this.record.runId,
-      asset_id: this.record.assetId,
-      record,
-    });
+    const files: Record<string, string> = {
+      "record.json": JSON.stringify(this.record, null, 2),
+    };
+    for (const [name, value] of Object.entries({
+      bundle: this.record.bundle,
+      execution: this.record.execution,
+      metacognition: this.record.monitoring,
+    })) {
+      if (value) files[`${name}.json`] = JSON.stringify(value, null, 2);
+    }
+    await writeFiles(this.paths.runDirectory, files);
+    await this.memory.load_data(
+      Kind.WM,
+      storeWorkingMemory(
+        projectWorkingMemory(this.record, this.paths.runDirectory),
+      ),
+    );
     await writeFiles(this.paths.runDirectory, {
       "wm-snapshot.json": JSON.stringify(
         await this.memory.read_data(Kind.WM),
@@ -150,6 +158,11 @@ await appendFile(${JSON.stringify(`${this.paths.runDirectory}/trace.jsonl`)},${J
         2,
       ),
     });
+  }
+  async readWorkingMemory(): Promise<WorkingMemory> {
+    return readWorkingMemory(
+      (await this.memory.read_data(Kind.WM)) as unknown as StoredWorkingMemory,
+    );
   }
   verification(): Verification {
     return {

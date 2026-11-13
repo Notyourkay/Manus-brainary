@@ -2,6 +2,7 @@ import { notify, text } from "@brainary/poa-sdk";
 import { createAgentRunner } from "./agent.js";
 import type {
   DomainKnowledge,
+  ExecutionResult,
   RunInput,
   TaskContext,
   TaskPackage,
@@ -10,7 +11,9 @@ import type {
 import { collectEvidence } from "./evidence.js";
 import { executeBundle } from "./execution.js";
 import { writeFiles } from "./files.js";
+import { checkState } from "./metacognition.js";
 import type { RunJournal } from "./records.js";
+import { decideRsi } from "./rsi/trigger.js";
 import { validateOrderRun } from "./validation.js";
 
 export async function executeAsset(
@@ -24,12 +27,38 @@ export async function executeAsset(
   const context = journal.record.context as TaskContext;
   const inputPath = `${runDirectory}/${asset.method.inputKind === "csv" ? "input.csv" : "input.txt"}`;
   const trace = async (event: TraceEvent) => {
+    if (event.type === "step_revision") {
+      journal.record.monitoring.revisions++;
+      await journal.save();
+    }
     await journal.trace(event);
     if (display && event.type === "step_started")
       notify(`开始步骤：${JSON.stringify(event.step)}`);
     if (display && event.type === "step_revision")
       notify(`修订步骤 ${event.stepId}：${event.feedback}`);
   };
+  const runner = createAgentRunner(asset.config, trace, {
+    scenario: asset.method.scenario,
+    runId: journal.record.runId,
+    assetId: asset.assetId,
+    runDirectory,
+    inputPath,
+    inputIsSnapshot: input.source !== "user:text",
+    sourceRoot: journal.record.conditions.cwd,
+    toolScript: `${runDirectory}/resources/order-tools.mjs`,
+  });
+  const reviewer = createAgentRunner(asset.config, trace);
+  const plan = await checkState(journal, reviewer, "plan_completed");
+  const guidance = plan.review.passed ? "" : plan.review.feedback;
+  if (guidance) {
+    journal.record.monitoring.revisions++;
+    await trace({
+      type: "plan_correction",
+      feedback: guidance,
+      checkRef: plan.resultRef,
+    });
+    await journal.save();
+  }
   const execution = await executeBundle(
     {
       request: journal.record.request,
@@ -44,16 +73,18 @@ export async function executeAsset(
       context,
     },
     asset.bundle,
-    createAgentRunner(asset.config, trace, {
-      scenario: asset.method.scenario,
-      runId: journal.record.runId,
-      assetId: asset.assetId,
-      runDirectory,
-      inputPath,
-      inputIsSnapshot: input.source !== "user:text",
-      sourceRoot: journal.record.conditions.cwd,
-      toolScript: `${runDirectory}/resources/order-tools.mjs`,
-    }),
+    runner,
+    async (step, attempt, reply) => {
+      const check = await checkState(
+        journal,
+        reviewer,
+        "step_completed",
+        step.id,
+        attempt,
+        reply.text,
+      );
+      return { review: check.review, reviewerId: check.reviewerId };
+    },
     async (step) => {
       if (display)
         notify(
@@ -69,7 +100,19 @@ export async function executeAsset(
       await journal.save();
     },
     trace,
-  );
+    guidance,
+  ).catch(async (error): Promise<ExecutionResult> => {
+    journal.record.error = String(error);
+    await journal.trace({
+      type: "execution_error",
+      error: journal.record.error,
+    });
+    return {
+      status: "failed",
+      steps: journal.record.execution?.steps ?? [],
+      finalOutput: null,
+    };
+  });
   journal.record.execution = execution;
   const evidence = await collectEvidence(runDirectory);
   if (asset.method.scenario === "order-audit" && evidence.input) {
@@ -136,6 +179,16 @@ export async function executeAsset(
     ),
     "result.md": `${journal.record.status === "completed" ? "" : "本次验收未通过。\n\n"}${execution.finalOutput ?? "检查未通过，请查看运行记录。"}`,
   });
+  const completion = await checkState(journal, reviewer, "task_completed");
+  if (!completion.review.passed) {
+    journal.record.status = "failed";
+    await writeFiles(runDirectory, {
+      "result.md": `本次验收未通过。\n\n${execution.finalOutput ?? "检查未通过，请查看运行记录。"}`,
+    });
+  }
+  journal.record.finishedAt = new Date().toISOString();
+  journal.record.rsi = decideRsi(journal.record);
+  await journal.trace({ type: "rsi_decided", decision: journal.record.rsi });
   await journal.trace({ type: "run_finished", status: journal.record.status });
   await journal.save();
   await journal.saveAsset(pkg, true);
@@ -146,7 +199,8 @@ export async function executeAsset(
   text({
     status: journal.record.status,
     acceptance: journal.record.acceptance.kind,
-    modelReviewPassed: execution.status === "completed",
+    modelReviewPassed:
+      execution.status === "completed" && completion.review.passed,
     checksPassed: journal.record.acceptance.passed,
     assetId: asset.assetId,
     runId: journal.record.runId,

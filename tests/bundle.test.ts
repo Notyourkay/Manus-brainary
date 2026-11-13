@@ -1,6 +1,6 @@
 import { BrainaryTool } from "@brainary/poa-sdk";
 import { describe, expect, it } from "vitest";
-import { parseBundle, parseReview } from "../src/bundle.js";
+import { parseBundle } from "../src/bundle.js";
 import fixture from "./fixtures/bundle.json";
 
 describe("generation boundary", () => {
@@ -47,14 +47,7 @@ describe("generation boundary", () => {
     ).toEqual([BrainaryTool.exec_command]);
   });
 
-  it("rejects malformed model replies and invalid review booleans", () => {
+  it("rejects malformed model replies", () => {
     expect(() => parseBundle("无法生成", [])).toThrow("JSON");
-    expect(() => parseReview('{"passed":"yes","feedback":"通过"}')).toThrow(
-      "契约",
-    );
-    expect(parseReview('{"passed":false,"feedback":"缺少要求 B"}')).toEqual({
-      passed: false,
-      feedback: "缺少要求 B",
-    });
   });
 });

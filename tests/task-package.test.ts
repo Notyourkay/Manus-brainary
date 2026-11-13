@@ -42,6 +42,11 @@ describe("natural-language standalone package", () => {
       verification: [],
     };
     const files = unzipSync(buildTaskArchive(pkg, "text(MANUS_PACKAGE);"));
+    const pragma = JSON.parse(
+      strFromU8(files["main.js"]).split("\n")[0].replace("// @exec: ", ""),
+    );
+    // 两步最多三次执行/步骤检查，另有方案与结束检查。
+    expect(pragma.yield_time_ms).toBe(8 * config.agentTimeoutMs + 60_000);
     expect(parse(strFromU8(files["manifest.toml"])).poa).toMatchObject({
       entry: "main.js",
       runtime: "codex-v8",

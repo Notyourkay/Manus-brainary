@@ -70,6 +70,8 @@ export async function reflect(
     context: source.record.context,
     bundle: source.pkg.asset.bundle,
     execution: source.record.execution,
+    metacognition: source.record.monitoring,
+    trigger: source.record.rsi,
     acceptance: source.record.acceptance,
     error: source.record.error,
     toolReceipts: source.toolReceipts,
