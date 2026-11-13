@@ -24,11 +24,12 @@ await publishLearning(memoryRoot, {
   experiences: [],
 });
 const requestFile = join(root, "request.json");
+const request = `请核对 ${join(repo, "examples/orders-a.csv")} 的订单结算，排除取消订单，按整数分计算退款后净额，按客户汇总并落盘报告。`;
 await writeFile(
   requestFile,
   JSON.stringify(
     {
-      request: `请核对 ${join(repo, "examples/orders-a.csv")} 的订单结算，排除取消订单，按整数分计算退款后净额，按客户汇总并落盘报告。`,
+      request,
     },
     null,
     2,
@@ -51,5 +52,5 @@ await writeFile(
 );
 const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`;
 console.log(
-  `演示目录：${root}\n人工旧策略：${strategy.id}\n\n执行：\ncd ${quote(root)}\nexport MANUS_MEMORY_ROOT=${quote(memoryRoot)}\nexport MANUS_INPUT_FILE=${quote(requestFile)}\n/Users/notyourkay/brainary-rc-0.2.0/bin/brainary --add-dir ${quote(repo)}\n\nTUI：\n/poa fg ${join(repo, "dist/manus.poa")}\n\n完成后记下运行目录，再运行：\n/poa fg ${join(repo, "dist/manus-rsi.poa")}\nRSI 只问一次来源运行目录。生成入口与 RSI 入口的输入分别独立。`,
+  `演示目录：${root}\n人工旧策略：${strategy.id}\n\n执行：\ncd ${quote(root)}\nexport MANUS_MEMORY_ROOT=${quote(memoryRoot)}\nunset MANUS_INPUT_FILE\n/Users/notyourkay/brainary-rc-0.2.0/bin/brainary --add-dir ${quote(repo)}\n\nTUI：\n/poa fg ${join(repo, "dist/manus.poa")}\n\n选择“执行新任务”，输入：\n${request}\n\n完成后记下运行目录，在同一 TUI 再运行：\n/poa fg ${join(repo, "dist/manus.poa")}\n选择“复盘改进已有任务”，填入来源运行目录。生成与 RSI 共用 Manus 入口。`,
 );

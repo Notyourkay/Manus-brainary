@@ -1,10 +1,10 @@
 # Manus V2 人工验收手册
 
-更新：2026-11-13。开发分支 `codex/v2-rsi`。本手册对应 V2-H1—H5，记录操作、预期和实际证据；人工签收由用户完成。
+更新：2026-11-13。开发分支 `codex/v2-rsi`。本手册对应 V2-H1—H6，记录操作、预期和实际证据；人工签收由用户完成。
 
 ## 1. 展示内容
 
-`manus.poa` 生成并执行任务 Agent。`manus-rsi.poa` 对一个已有订单运行进行一轮复盘，分别改进任务 Agent/方案和生成策略，真实运行基线与候选，再决定采用或保留。输出的 `selected/task.poa` 继续无需输入地重跑原任务。
+`manus.poa` 是统一入口。选择“执行新任务”生成并执行任务 Agent；选择“复盘改进已有任务”则由内部 RSI 模块对已有订单运行进行一轮复盘，分别改进任务 Agent/方案和生成策略，真实运行基线与候选，再决定采用或保留。输出的 `selected/task.poa` 继续无需输入地重跑原任务。
 
 本轮用订单结算验证完整 RSI：同一轮中有四次内层执行和四次外层生成执行。外层的 C 材料未提供给复盘 Agent。普通文本任务仍可生成，但 V2 自动选择的验收范围是具有固定客观检查器的订单结算。
 
@@ -16,7 +16,7 @@ pnpm install --frozen-lockfile
 pnpm lint && pnpm typecheck && pnpm test && pnpm package
 ```
 
-应生成 `dist/manus.poa` 和 `dist/manus-rsi.poa`。沿用 Brainary 0.2.0-rc 默认配置，任务 Agent 模型为 `gpt-5.6-sol`/`custom`。凭据由 Brainary 管理。
+应生成唯一的 Manus 应用包 `dist/manus.poa`；package 会清除旧的独立 RSI 构建产物。沿用 Brainary 0.2.0-rc 默认配置，任务 Agent 模型为 `gpt-5.6-sol`/`custom`。凭据由 Brainary 管理。
 
 ## 3. 准备演示与生成基线
 
@@ -40,7 +40,7 @@ node scripts/prepare-rsi-demo.mjs
 /poa fg /Users/notyourkay/Manus-brainary/dist/manus.poa
 ```
 
-准备脚本通过 `MANUS_INPUT_FILE` 提供自然语言请求，因此这次演示无需再输入任务。日常使用不设置此变量时，Manus 正常询问任务描述。
+选择“执行新任务”，粘贴准备脚本打印的完整自然语言请求。相同请求也保存在 request.json 中。菜单中的另一项是“复盘改进已有任务”，两种操作都由同一 Manus 入口承接。
 
 应得到两步方案、真实 read/write 回执及 13 项通过的客观检查；A 材料净额为 14000 分。记下输出的 **运行目录** `.../runs/<runId>` 和任务包路径。
 
@@ -58,10 +58,12 @@ node scripts/check-run.mjs <基线运行目录>
 在刚才的 TUI 中运行：
 
 ```text
-/poa fg /Users/notyourkay/Manus-brainary/dist/manus-rsi.poa
+/poa fg /Users/notyourkay/Manus-brainary/dist/manus.poa
 ```
 
-它只询问一次来源运行目录，填入上一节的 `.../runs/<runId>`。不要填 `assets/<assetId>` 或 task.poa 路径。联调也可在启动 Brainary 前设置 `MANUS_RSI_SOURCE=<运行目录>`，此时跳过询问；它与 Manus 的任务输入独立。
+选择“复盘改进已有任务”，再填入上一节的来源运行目录 `.../runs/<runId>`。不要填 `assets/<assetId>` 或 task.poa 路径。Manus 在同一次 PoA 执行中直接调用内部 RSI 模块。
+
+脚本联调可用 POA_INPUT 或 MANUS_INPUT_FILE 提供 `{"action":"rsi","sourceDirectory":"/absolute/runs/run-id"}`，跳过菜单和目录询问。原有字符串或 `{"request":"自然语言任务"}` 继续直接进入生成流程。人工验收菜单时，启动 Brainary 前先 `unset MANUS_INPUT_FILE`，避免显式输入跳过菜单。
 
 TUI 依次显示复盘和 `inner/outer`、`baseline/candidate`、用例 ID。运行时间取决于模型响应。结束时显示通过数、Agent 调用数、采用/保留原因、选中包路径与实验目录 `.../rsi/<cycleId>`。
 
@@ -124,17 +126,19 @@ node scripts/check-run.mjs <新重跑运行目录> <选中版本的source用例�
 
 ## 6. 验证后续生成与保留基线
 
-回到使用演示 `MANUS_MEMORY_ROOT` 的 TUI，再运行 `manus.poa`。它读取刚采用的外层策略和经验；若仍设置了准备脚本的 `MANUS_INPUT_FILE`，会再次执行 A 请求。
+回到使用演示 `MANUS_MEMORY_ROOT` 的 TUI，再运行 `manus.poa`，选择“执行新任务”并再次输入 A 请求。它读取刚采用的外层策略和经验。
 
 检查新运行的 `trace.jsonl` 中 `strategy_selected`、`record.json` / `asset.json` 的 `generationStrategy`：ID 应与上轮 `result.selectedStrategyId` 相同。`context.json` 应同时保留人工经验和发布的自动经验；自动经验有 applicability、version、来源运行、cycleId、支持它的评估运行和适用范围。未发布的候选不出现在后续上下文中。
 
-再用这个已优化运行启动 `manus-rsi.poa`。当双方均为一步并通过时，调用数相同，应显示“保留基线”，`publishedExperienceIds` 为空，当前策略不变。若实际运行出现新的改善，则按同一规则采用；核对指标及原因即可。
+再次运行 `manus.poa`，选择“复盘改进已有任务”，填入这个已优化运行的目录。当双方均为一步并通过时，调用数相同，应显示“保留基线”，`publishedExperienceIds` 为空，当前策略不变。若实际运行出现新的改善，则按同一规则采用；核对指标及原因即可。
 
 ## 7. 失败与重试
 
 某次评估失败时保留其运行记录，仍计入对照；候选不能在未全通过时被采用。复盘格式错误时会携带校验反馈修正一次，原始回复和修正回复分别保留；仍然失败或出现证据收集等流程错误时写 `error.json`，标明阶段和原因，此轮不发布结果。排除具体原因后，从同一个来源运行启动新的一轮；原资产可继续运行。
 
 ## 8. 实测记录
+
+以下两轮为核心 RSI 的既有联调证据。统一入口调整的菜单、单包构建和内部 RSI 联调结果记录在本节末。
 
 本机证据根目录：`/Users/notyourkay/Manus-brainary/.local/v2-acceptance-20261113`。实现提交 `e6e5300`；lint、typecheck、36 个自动测试、package 均通过，构建包哈希保存在 `build-verification.json`。
 
@@ -170,6 +174,20 @@ node scripts/check-rsi.mjs .local/v2-acceptance-20261113/artifacts/manus/rsi/68c
 
 两轮完整实验共 16 次对照运行均由真实模型与工具完成，每次 13/13 客观检查通过，两个 check-rsi 命令均返回 verified: true。开发验证已完成，以下人工签收状态保留 pending。
 
+### 统一入口验收
+
+统一入口证据根目录：`/Users/notyourkay/Manus-brainary/.local/v2-unified-entry-20261113`。本轮使用真实 TUI 菜单，未设置 MANUS_INPUT_FILE；两个操作都运行同一个 `/poa fg /Users/notyourkay/Manus-brainary/dist/manus.poa`。
+
+- “执行新任务”：运行 `af4c9a6d-b33b-45c1-baf0-d73d427fed91`，真实工具调用 2 次，Agent 调用 3 次，13/13 客观检查通过。
+- 构建检查：dist 仅有 manus.poa 一个应用包；旧的独立 RSI 产物已清除。生成的 task.poa 不含 Manus 菜单，并带有本次执行通过的证据。
+- 自动检查：38 个测试通过，lint、typecheck 和 package 通过。演示准备脚本已实际运行，打印统一入口的两种操作说明。
+- 内部 RSI：实验 `443ddf3f-f454-4fe4-bcdf-e0e984999f3c` 完成八次真实评估，每次 13/13 客观检查通过。内层调用 4→4、外层 6→6，正确保留基线；check-rsi 返回 verified: true，原资产未改变。
+
+```bash
+node scripts/check-run.mjs .local/v2-unified-entry-20261113/artifacts/manus/runs/af4c9a6d-b33b-45c1-baf0-d73d427fed91
+node scripts/check-rsi.mjs .local/v2-unified-entry-20261113/artifacts/manus/rsi/443ddf3f-f454-4fe4-bcdf-e0e984999f3c
+```
+
 ## 9. 人工签收
 
 | 契约 | 人工核对 | 状态 |
@@ -179,5 +197,6 @@ node scripts/check-rsi.mjs .local/v2-acceptance-20261113/artifacts/manus/rsi/68c
 | V2-H3 | 相同输入与条件，八次真实对照，选择可重算，篡改副本被拒绝 | pending |
 | V2-H4 | 选中任务包在新会话直接执行；外层策略作用于后续生成 | pending |
 | V2-H5 | 采用与保留分支、联调证据和操作可复现 | pending |
+| V2-H6 | 构建只有一个 Manus 应用包；同一入口可完成生成执行和内部 RSI；task.poa 直接重跑 | pending |
 
 本分支完成后等待用户人工验收，不自动合并 main。

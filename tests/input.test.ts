@@ -3,7 +3,11 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { inputCaptureScript, parseUserRequest } from "../src/input.js";
+import {
+  inputCaptureScript,
+  parseLaunch,
+  parseUserRequest,
+} from "../src/input.js";
 
 const capture = (kind: "text" | "csv", value: string) =>
   JSON.parse(
@@ -40,5 +44,35 @@ describe("natural-language task entry", () => {
     expect(result.error).toContain(resolve("examples/does-not-exist.csv"));
     expect(result.input).toBeUndefined();
     expect(() => parseUserRequest(" ")).toThrow("任务描述");
+  });
+});
+
+describe("unified Manus launch", () => {
+  it("preserves natural-language inputs and dispatches explicit RSI input", () => {
+    expect(parseLaunch("写一份会议提纲")).toEqual({
+      action: "generate",
+      request: "写一份会议提纲",
+    });
+    expect(parseLaunch({ request: "核对订单" })).toEqual({
+      action: "generate",
+      request: "核对订单",
+    });
+    expect(parseLaunch({ action: "generate", request: "核对订单" })).toEqual({
+      action: "generate",
+      request: "核对订单",
+    });
+    expect(
+      parseLaunch({ action: "rsi", sourceDirectory: " /runs/source " }),
+    ).toEqual({ action: "rsi", sourceDirectory: "/runs/source" });
+  });
+  it("rejects an unsupported action or missing operation input at entry", () => {
+    expect(() => parseLaunch({ action: "other", request: "任务" })).toThrow(
+      "action",
+    );
+    expect(() => parseLaunch({ action: "rsi" })).toThrow("来源运行目录");
+    expect(() => parseLaunch({ action: "rsi", sourceDirectory: " " })).toThrow(
+      "来源运行目录",
+    );
+    expect(() => parseLaunch({ action: "generate" })).toThrow("任务描述");
   });
 });

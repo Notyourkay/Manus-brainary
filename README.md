@@ -1,10 +1,10 @@
 # Manus on Brainary
 
-Manus 根据用户任务生成任务 Agent 与执行方案，通过 Brainary SDK 创建实例并执行。`dist/manus.poa` 负责生成执行，`dist/manus-rsi.poa` 负责对已有运行复盘和改进，均在 Brainary TUI 前台运行。
+Manus 根据用户任务生成任务 Agent 与执行方案，通过 Brainary SDK 创建实例并执行。统一入口 `dist/manus.poa` 在 Brainary TUI 前台运行，内部提供生成执行和 RSI 复盘改进两种操作。
 
 V1 支持自然语言生成、任务包直接重跑、真实工具、简化领域本体、经历查询与人工经验读取。任务方法与每次材料分开，资产分别记录生成、执行、客观验证和人工签收状态。订单 CSV 结算核对是完整验收场景。V1 已完成。V2 在 `codex/v2-rsi` 增加自动经验提炼、任务 Agent/方案改进、生成策略改进、固定用例真实对照和版本选择；开发及真实联调已完成，等待人工验收。操作和证据集中在各阶段人工验收手册。
 
-当前任务包固定使用包内原请求与材料快照，不再提供新任务交互或显式新输入入口。V2 沿用这一入口，独立的 RSI 入口每次只运行一轮改进。
+当前任务包固定使用包内原请求与材料快照，不再提供新任务交互或显式新输入入口。V2 沿用这一入口，RSI 模块由 Manus 主入口调用，每次运行一轮改进。
 
 ## 开发依据
 
@@ -32,8 +32,7 @@ pnpm package
 构建产物：
 
 - `dist/main.js`：Runtime 执行的 JavaScript。
-- `dist/manus.poa`：可分发的 Manus 生成程序包。
-- `dist/manus-rsi.poa`：独立的单轮 RSI 程序包。
+- `dist/manus.poa`：包含生成执行与内部 RSI 的统一应用包。
 
 ## 在 TUI 中运行
 
@@ -49,17 +48,18 @@ pnpm package
 /poa fg /Users/notyourkay/Manus-brainary/dist/manus.poa
 ```
 
-随后直接输入完整任务。例如“介绍三个适合初学者的时间管理方法”，或“请核对 /path/orders.csv 的订单结算并汇总客户净额”。外层 Manus 理解任务并提取已有资料，生成可复用 Agent；只有必要信息确实缺失时才追问。
+随后选择“执行新任务”，输入完整任务。例如“介绍三个适合初学者的时间管理方法”，或“请核对 /path/orders.csv 的订单结算并汇总客户净额”。外层 Manus 理解任务并提取已有资料，生成可复用 Agent；只有必要信息确实缺失时才追问。
 
 无需填写目标/材料字段，也不要求每个任务都有文件。订单 CSV 是验证真实工具与客观结果的场景。Brainary 使用本机默认配置，模型凭据由 Brainary 管理。
 
-生成完成后，TUI 会给出 `/poa fg <任务包路径>`，直接运行 `task.poa` 即可重跑。任务包不读取 POA_INPUT / MANUS_INPUT_FILE；这两个输入通道只用于 Manus 的生成入口。
+生成完成后，TUI 会给出 `/poa fg <任务包路径>`，直接运行 `task.poa` 即可重跑。任务包不读取 POA_INPUT / MANUS_INPUT_FILE；这两个输入通道用于 Manus 的统一入口，任务描述进入生成流程，RSI 启动对象进入内部复盘流程。
 
 ## 代码布局
 
 ```text
-src/main.ts        串起输入、生成、执行与展示
-src/input.ts       自然语言入口与资料快照
+src/main.ts        统一入口，调用生成执行或内部 RSI 模块
+src/generate.ts    串起任务生成、执行与展示
+src/input.ts       操作选择、自然语言输入与资料快照
 src/config.ts      模型、工具目录与执行时限
 src/contracts.ts   Agent 定义、计划、结果、记录
 src/bundle.ts      模型返回的解析与契约校验
@@ -68,7 +68,6 @@ src/execution.ts   按生成的步骤、依赖和修订策略执行
 src/agent.ts       SDK 创建、等待、读取结果与关闭
 src/records.ts     记录、轨迹、资产状态与 WM 读回
 src/context.ts     选择领域资料、人工/自动经验与经历
-src/rsi-main.ts    RSI 入口，一次选择来源运行
 src/rsi/           复盘、评估、确定性选择、版本与经验发布
 src/validation.ts  订单结果与工具证据的客观检查
 knowledge/         可维护的领域资料和人工经验
@@ -76,7 +75,7 @@ resources/         随包的真实任务工具及经历索引脚本
 examples/          三份订单验收材料及 RSI 用例清单
 src/task-package.ts 自动打包生成的任务
 src/task-main.ts   任务包独立执行入口
-src/run.ts        两种运行入口共用的执行流程
+src/run.ts        生成、重跑与 RSI 评估共用的执行流程
 src/files.ts      SDK 终端工具的文件导出操作
 tests/             契约和真实执行器的自动测试
 scripts/           模板构建配套脚本
@@ -102,10 +101,10 @@ Manus 包会生成新资产及 task.poa；任务包只执行已有资产，保�
 ## 运行 V2 RSI
 
 ```text
-/poa fg /Users/notyourkay/Manus-brainary/dist/manus-rsi.poa
+/poa fg /Users/notyourkay/Manus-brainary/dist/manus.poa
 ```
 
-输入一个已有订单运行目录 `.../runs/<runId>`。RSI 读取真实执行记录，提出内外层候选，完成八次对照运行，导出 `rsi/<cycleId>/selected/task.poa` 并显示采用或保留的原因。新包仍直接重跑原任务。原资产保持不变；选中的生成策略作用于下一次 Manus 生成。
+选择“复盘改进已有任务”，输入一个已有订单运行目录 `.../runs/<runId>`。RSI 读取真实执行记录，提出内外层候选，完成八次对照运行，导出 `rsi/<cycleId>/selected/task.poa` 并显示采用或保留的原因。新包仍直接重跑原任务。原资产保持不变；选中的生成策略作用于下一次 Manus 生成。
 
 ```bash
 node scripts/prepare-rsi-demo.mjs
@@ -113,3 +112,5 @@ node scripts/check-rsi.mjs <实验目录>
 ```
 
 准备脚本创建隔离环境和明确标注的人工两步旧策略，便于真实展示冗余步骤被合并的收益。核查脚本从实际报告、工具回执、输入、上下文与调用轨迹重新检查结果和选择，不只读取汇总结论。普通文本生成仍可使用；当前自动 RSI 验收范围是具有固定客观检查器的订单结算任务。完整操作见 V2 手册。
+
+脚本联调使用统一启动输入：`POA_INPUT` 或 `MANUS_INPUT_FILE` 的内容为字符串/`{"request":"任务描述"}` 时直接执行新任务；为 `{"action":"rsi","sourceDirectory":"/absolute/runs/run-id"}` 时直接调用内部 RSI。没有启动输入时显示操作菜单。

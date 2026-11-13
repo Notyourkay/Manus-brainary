@@ -6,19 +6,20 @@
 
 V2 在 V1 的生成、执行、领域资料、经历召回与证据之上，完成自动复盘、经验候选、内层任务资产改进、外层生成策略改进、真实对照评估及版本选择。每次 RSI 是一轮有界实验，不在正常任务运行时无限自我迭代。
 
-交付两个应用入口：
+Manus 统一交付 `manus.poa`，内部包含生成执行模块和 RSI 模块：
 
-| 入口 | 行为 |
+| 入口/操作 | 行为 |
 | --- | --- |
-| manus.poa | 接收自然语言，读取已采用的生成策略与经验，生成并执行任务资产 |
-| manus-rsi.poa | 选择一个已有运行目录，自动复盘，产生并评估内外层候选，输出选择结果 |
+| manus.poa → 执行新任务 | 接收自然语言，读取已采用的生成策略与经验，生成并执行任务资产 |
+| manus.poa → 复盘改进已有任务 | 选择已有运行目录，内部调用 RSI 模块，复盘、评估候选并选择版本 |
 | 生成的 task.poa | 直接重跑包内原任务，实例化已有定义，不询问新任务、不启动 RSI |
 
+无启动输入时，Manus 用 SDK ask 展示以上两种操作，再接收任务描述或来源运行目录。RSI 按需运行一轮，不另行部署应用包。脚本联调统一使用 POA_INPUT 或 MANUS_INPUT_FILE：原有字符串或 `{ "request": "自然语言任务" }` 继续直接生成；`{ "action": "rsi", "sourceDirectory": "/absolute/runs/run-id" }` 直接进入内部 RSI。显式输入优先于交互菜单，入口只校验一次。
 PoA 是编排代码，Agent 定义是可复用配置，实例由 SDK 创建并关闭。RSI 修改定义和策略数据，不改 SDK、模型权重或执行器源码。显式同类新任务调用继续暂缓。
 
 ## 2. 范围与评估场景
 
-沿用订单结算场景验证完整闭环：CSV 读取、Agent 计算、报告写入、模型步骤检查和 13 项独立客观检查。普通文本任务仍可生成执行；自动采用 RSI 候选需要客观检查器，本版 RSI 入口只接受有完整订单资产和输入的已结束运行。
+沿用订单结算场景验证完整闭环：CSV 读取、Agent 计算、报告写入、模型步骤检查和 13 项独立客观检查。普通文本任务仍可生成执行；自动采用 RSI 候选需要客观检查器，本版 RSI 模块只接受有完整订单资产和输入的已结束运行。
 
 内层对照使用来源运行的原材料和固定 B 材料；外层使用 B、C 两个完整新请求，分别重新调用基线和候选生成策略，再执行生成资产。C 不提供给复盘 Agent，作为留出任务。数据快照和哈希写入实验清单，不依赖原目录后续变化。候选不看到期望报告数值，检查器按已有领域规则独立复算。
 
@@ -57,7 +58,7 @@ RunRecord 增加可选 evaluation（cycleId、target、arm、caseId）与 genera
 
 ## 4. 单轮 RSI 流程
 
-1. 通过 TUI ask 选择来源运行目录；开发联调可用 MANUS_RSI_SOURCE。读取实际记录、原始资产、输入与资源，校验入口。
+1. 运行 manus.poa，选择“复盘改进已有任务”并提供来源运行目录；开发联调使用统一启动输入。读取实际记录、原始资产、输入与资源，校验入口。
 2. 建立独立 cycle 目录，保存 source、冻结 context、当前策略、用例快照和配置。
 3. 调用复盘 Agent，保存原始回复、诊断、经验候选、内层方案和外层策略候选。
 4. 内层基线与候选分别在两个相同输入上调用 V1 共用执行器。比较后，导出选择的 task.poa；候选定义和全部结果留存。
@@ -76,7 +77,7 @@ RunRecord 增加可选 evaluation（cycleId、target、arm、caseId）与 genera
 | artifacts/manus/assets/<assetId>/ | 新候选/生成资产及验证状态，保存策略与谱系 |
 | <memoryRoot>/learning/state.json | 按场景采用的策略与已发布经验；历史版本在各 cycle 中留存 |
 
-src/rsi/contracts.ts 定义 RSI 数据；measurement.ts 从真实证据重新计算指标；proposal.ts 负责模型复盘边界；comparison.ts 实现确定性选择；evaluation.ts 复用生成与执行链路；cycle.ts 编排一次实验；store.ts 使用 SDK 读写应用数据。resources/learning.mjs 提供小型 JSON 经验/策略存储，resources/evaluation.mjs 读取实际运行证据，供文件测试、离线核查与 PoA 共用。src/rsi-main.ts 是独立入口。
+src/rsi/contracts.ts 定义 RSI 数据；measurement.ts 从真实证据重新计算指标；proposal.ts 负责模型复盘边界；comparison.ts 实现确定性选择；evaluation.ts 复用生成与执行链路；cycle.ts 编排一次实验；store.ts 使用 SDK 读写应用数据。resources/learning.mjs 提供小型 JSON 经验/策略存储，resources/evaluation.mjs 读取实际运行证据，供文件测试、离线核查与 PoA 共用。src/main.ts 是统一入口，src/input.ts 负责操作选择与启动输入，src/generate.ts 负责生成执行；RSI 作为内部模块由主入口直接调用。
 
 沿用 MANUS_MEMORY_ROOT 共享经验与策略；默认根目录为 artifacts/manus。模型凭据与服务连接继续由 Brainary 配置提供。应用使用 WM 正式读写接口保存运行状态。0.2.0-rc 的 WM 声明属于本次 PoA 执行作用域，因此一轮 RSI 共用一次声明注册，顺序写入各次运行并各自导出 WM 读回副本。`agent_id` 不用于隔离声明；不在 Manus 重建基础框架。
 

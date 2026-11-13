@@ -2,13 +2,68 @@ import { ask, POA_INPUT } from "@brainary/poa-sdk";
 import type { RunInput, TaskMethod } from "./contracts.js";
 import { runNode } from "./files.js";
 
-export async function readRequest(): Promise<string> {
+export type ManusLaunch =
+  | { action: "generate"; request: string }
+  | { action: "rsi"; sourceDirectory: string };
+
+export async function readLaunch(): Promise<ManusLaunch> {
   const supplied = await launchInput();
-  return supplied === null
-    ? askForTask(
+  if (supplied !== null) return parseLaunch(supplied);
+  const response = await ask({
+    questions: [
+      {
+        question: "你希望 Manus 做什么？",
+        options: [
+          {
+            label: "执行新任务",
+            description: "描述任务，由 Manus 生成任务 Agent 并执行。",
+          },
+          {
+            label: "复盘改进已有任务",
+            description: "复盘已有运行，比较改进效果并选择版本。",
+          },
+        ],
+      },
+    ],
+  });
+  if (response.status === "unavailable")
+    throw new Error(
+      "请在 Brainary TUI 前台运行 Manus，或通过 MANUS_INPUT_FILE 提供启动输入。",
+    );
+  const answer = response.answers[0];
+  const choice = answer?.selected ?? answer?.text?.trim();
+  if (choice === "复盘改进已有任务")
+    return {
+      action: "rsi",
+      sourceDirectory: await askForTask(
+        "请输入要复盘的订单运行目录（runs/<runId>）。Manus 将运行一轮复盘、对照与版本选择。",
+      ),
+    };
+  if (choice === "执行新任务")
+    return {
+      action: "generate",
+      request: await askForTask(
         "请描述你希望完成的任务。已有资料、约束或文件位置可以直接写在这段描述里。",
+      ),
+    };
+  throw new Error("请选择“执行新任务”或“复盘改进已有任务”。");
+}
+
+export function parseLaunch(value: unknown): ManusLaunch {
+  if (typeof value === "object" && value !== null && "action" in value) {
+    if (value.action === "rsi") {
+      if (
+        !("sourceDirectory" in value) ||
+        typeof value.sourceDirectory !== "string" ||
+        !value.sourceDirectory.trim()
       )
-    : parseUserRequest(supplied);
+        throw new Error("复盘改进需要提供来源运行目录 sourceDirectory。");
+      return { action: "rsi", sourceDirectory: value.sourceDirectory.trim() };
+    }
+    if (value.action !== "generate")
+      throw new Error("Manus action 只支持 generate 或 rsi。");
+  }
+  return { action: "generate", request: parseUserRequest(value) };
 }
 
 export async function askForTask(question: string): Promise<string> {

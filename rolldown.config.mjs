@@ -51,8 +51,8 @@ const main = {
     },
   ],
   output: {
-    // 前台 PoA 默认会提前 yield；Demo 留出完整生成与执行的等待窗口。
-    banner: '// @exec: {"yield_time_ms": 900000, "max_output_tokens": 10000}',
+    // 统一入口需容纳一轮 RSI；普通任务完成后仍立即结束。
+    banner: '// @exec: {"yield_time_ms": 14400000, "max_output_tokens": 10000}',
     dir: "dist",
     entryFileNames: "main.js",
     format: "esm",
@@ -62,16 +62,6 @@ const main = {
 
 export default defineConfig([
   main,
-  {
-    ...main,
-    input: "src/rsi-main.ts",
-    output: {
-      ...main.output,
-      entryFileNames: "rsi.js",
-      banner:
-        '// @exec: {"yield_time_ms": 14400000, "max_output_tokens": 10000}',
-    },
-  },
   {
     input: "src/rsi/comparison.ts",
     output: { file: "dist/rsi-comparison.mjs", format: "esm" },

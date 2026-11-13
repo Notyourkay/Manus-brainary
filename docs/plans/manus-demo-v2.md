@@ -4,7 +4,7 @@
 
 ## 任务 1：版本与已验证经验读取
 
-文件：src/contracts.ts、generator.ts、main.ts、context.ts、records.ts；src/rsi/contracts.ts、store.ts；resources/learning.mjs。
+文件：src/contracts.ts、generator.ts、generate.ts、context.ts、records.ts；src/rsi/contracts.ts、store.ts；resources/learning.mjs。
 
 - [x] 定义 GeneratorStrategy、Experience provenance、Asset lineage 和 EvaluationTag；保持旧资产字段兼容。
 - [x] 实现 loadLearning(root) / publishLearning(root, update)，真实文件保持各场景策略与已发布经验。
@@ -37,9 +37,9 @@
 
 ## 任务 4：内外层闭环与入口
 
-文件：src/rsi/cycle.ts、src/rsi-main.ts、src/task-package.ts、rolldown.config.mjs、scripts/package.mjs、types/task-program.d.ts。
+文件：src/rsi/cycle.ts、src/main.ts、src/input.ts、src/generate.ts、src/task-package.ts、rolldown.config.mjs、scripts/package.mjs、types/task-program.d.ts。
 
-- [x] 打包 dist/manus-rsi.poa，支持 TUI 一次选择来源运行目录和 MANUS_RSI_SOURCE 联调。
+- [x] RSI 模块完成单轮闭环；对外入口按任务 6 收敛至 Manus。
 - [x] 一轮内层两组、外层两组真实评估，先保存完整证据和选中包再发布策略/经验；错误保存并停止，不启动无界循环。
 - [x] 内层输出 selected/task.poa，外层更新按场景的策略；原任务包保持固定重跑。
 - [x] lint、typecheck、test、package 全部通过（36 个自动测试）。
@@ -56,3 +56,16 @@
 - [x] 在现有 V2 手册记录实际 ID、指标、命令与证据；提交推送 codex/v2-rsi，停止等待人工验收。
 
 人工契约 V2-H5：按手册可重复生成基线、运行一轮 RSI、检查选择、重跑新资产、观察下一次生成。每个采用结论都有真实对照，候选拒绝保留旧版本；用户人工签收状态为 pending。
+
+## 任务 6：统一 Manus 入口
+
+文件：src/main.ts、src/input.ts、src/generate.ts、rolldown.config.mjs、scripts/package.mjs、scripts/prepare-rsi-demo.mjs、tests/input.test.ts；删除 src/rsi-main.ts。
+
+- [x] 更新设计及人工契约：一个 Manus 应用，内部选择生成执行或 RSI，RSI 保持按需的一轮评估。
+- [x] 将现有生成流程移至 generateTask(request)，主入口按 readLaunch() 的 generate/rsi 结果调用内部模块。
+- [x] 保留自然语言启动输入，增加统一的 `{action:"rsi",sourceDirectory}` 输入；无输入时用 SDK ask 选择操作。
+- [x] 移除独立 RSI 构建和打包，正常 package 时清除旧输出，演示脚本与手册都只指向 manus.poa。
+- [x] 测试入口类型与缺失输入，完成 lint、typecheck、test、package，并在 TUI 验证两个操作及内部 RSI 的真实运行。
+- [x] 将证据补充到现有手册，推送 codex/v2-rsi，等待人工验收。
+
+人工契约 V2-H6：构建后只有一个 Manus 应用包。在 TUI 运行同一 manus.poa，能分别选择并完成新任务和已有运行复盘；后者输出完整的 comparison/result 和选中 task.poa，check-rsi 通过。原 task.poa 仍直接重跑，不出现 Manus 操作菜单。

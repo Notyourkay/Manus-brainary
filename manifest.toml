@@ -5,4 +5,4 @@ version = "0.1.0"
 runtime = "codex-v8"
 poa_api_version = 1
 entry = "main.js"
-description = "Generate task agents and an execution plan, then run the plan."
+description = "Generate and execute task agents, or improve existing runs through internal RSI."
