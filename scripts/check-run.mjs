@@ -24,7 +24,7 @@ const record = await json("record.json"),
 assert.equal(record.version, 2, "此核查器用于 V1 优化后的格式版本 2 记录");
 assert.equal(record.status, "completed");
 assert.equal(record.execution.status, "completed");
-if (snapshot.version === 3) {
+if (snapshot.version >= 3) {
   assert.deepEqual(
     snapshot,
     storeWorkingMemory(projectWorkingMemory(record, root)),
@@ -47,6 +47,12 @@ if (snapshot.version === 3) {
     const state = JSON.parse(await readFile(check.wmRef, "utf8"));
     assert.equal(state.task.runId, record.runId);
     assert.equal(state.metacognition.checkpoint, check.checkpoint);
+    if (snapshot.version === 4 && check.checkpoint === "task_completed") {
+      assert.equal(state.task.status, "running");
+      assert.equal(state.execution.status, "checking");
+      assert.equal(state.execution.activeStep, "");
+      assert.equal(state.execution.attempt, 0);
+    }
     const documents = JSON.parse(await readFile(check.evidenceRef, "utf8"));
     for (const item of [...check.review.coverage, ...check.review.problems])
       for (const ref of item.evidenceRefs)
@@ -73,6 +79,52 @@ const trace = (await readFile(join(root, "trace.jsonl"), "utf8"))
   .trim()
   .split("\n")
   .map((line) => JSON.parse(line));
+if (snapshot.version === 4) {
+  const wm = readWorkingMemory(snapshot);
+  assert.equal(
+    wm.generation.status,
+    record.mode === "generate" ? "generated" : "reused",
+  );
+  assert.equal(wm.generation.pendingQuestion, "");
+  assert.equal(wm.execution.status, record.status);
+  assert.equal(wm.execution.activeStep, "");
+  assert.equal(wm.execution.attempt, 0);
+  let current;
+  let step;
+  let attempt = 0;
+  for (const [index, event] of trace.entries()) {
+    if (event.type === "wm_state_updated") current = event;
+    if (event.type === "step_started") {
+      step = event.step.id;
+      attempt = 0;
+      assert.equal(trace[index + 1].execution.activeStep, step);
+      assert.equal(trace[index + 1].execution.attempt, 0);
+    }
+    if (event.type === "attempt_started") {
+      attempt = event.attempt;
+      assert.equal(trace[index + 1].execution.activeStep, event.stepId);
+      assert.equal(trace[index + 1].execution.attempt, attempt);
+      assert.equal(trace[index + 1].execution.status, "running");
+    }
+    if (event.type === "clarification_requested") {
+      assert.equal(current.generation.status, "awaiting_input");
+      assert.equal(current.generation.pendingQuestion, event.question);
+    }
+    if (event.type === "agent_requested") {
+      if (event.definition.id === "manus-generator") {
+        assert.equal(current.generation.status, "generating");
+        assert.equal(current.generation.pendingQuestion, "");
+      } else if (
+        record.bundle.agents.some((agent) => agent.id === event.definition.id)
+      ) {
+        assert.equal(current.execution.status, "running");
+        assert.equal(current.execution.activeStep, step);
+        assert.equal(current.execution.attempt, attempt);
+        assert.equal(current.execution.outputRef, "");
+      }
+    }
+  }
+}
 assert.equal(trace[0].type, "run_started");
 assert.ok(
   trace.some(
@@ -83,7 +135,7 @@ for (const event of trace) {
   assert.equal(event.runId, record.runId);
   assert.equal(event.assetId, record.assetId);
 }
-if (snapshot.version === 3) {
+if (snapshot.version >= 3) {
   for (const check of record.monitoring.checks) {
     const consumed = trace.find(
       (e) => e.type === "agent_input" && e.agentId === check.reviewerId,

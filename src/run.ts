@@ -27,11 +27,7 @@ export async function executeAsset(
   const context = journal.record.context as TaskContext;
   const inputPath = `${runDirectory}/${asset.method.inputKind === "csv" ? "input.csv" : "input.txt"}`;
   const trace = async (event: TraceEvent) => {
-    if (event.type === "step_revision") {
-      journal.record.monitoring.revisions++;
-      await journal.save();
-    }
-    await journal.trace(event);
+    await journal.observeExecution(event);
     if (display && event.type === "step_started")
       notify(`开始步骤：${JSON.stringify(event.step)}`);
     if (display && event.type === "step_revision")
@@ -90,20 +86,19 @@ export async function executeAsset(
         notify(
           `步骤 ${step.stepId}：${step.status === "passed" ? "模型检查通过" : "模型检查未通过"}`,
         );
-      await trace({ type: "step_completed", step });
       journal.record.execution ??= {
         status: "failed",
         steps: [],
         finalOutput: null,
       };
       journal.record.execution.steps.push(step);
-      await journal.save();
+      await trace({ type: "step_completed", step });
     },
     trace,
     guidance,
   ).catch(async (error): Promise<ExecutionResult> => {
     journal.record.error = String(error);
-    await journal.trace({
+    await trace({
       type: "execution_error",
       error: journal.record.error,
     });
@@ -114,6 +109,7 @@ export async function executeAsset(
     };
   });
   journal.record.execution = execution;
+  await trace({ type: "execution_verifying" });
   const evidence = await collectEvidence(runDirectory);
   if (asset.method.scenario === "order-audit" && evidence.input) {
     input = evidence.input;
@@ -157,11 +153,8 @@ export async function executeAsset(
             },
           ],
         };
-  journal.record.status =
-    execution.status === "completed" && journal.record.acceptance.passed
-      ? "completed"
-      : "failed";
-  journal.record.finishedAt = new Date().toISOString();
+  const accepted =
+    execution.status === "completed" && journal.record.acceptance.passed;
   await trace({
     type: "acceptance_completed",
     acceptance: journal.record.acceptance,
@@ -177,11 +170,12 @@ export async function executeAsset(
       null,
       2,
     ),
-    "result.md": `${journal.record.status === "completed" ? "" : "本次验收未通过。\n\n"}${execution.finalOutput ?? "检查未通过，请查看运行记录。"}`,
+    "result.md": `${accepted ? "" : "本次验收未通过。\n\n"}${execution.finalOutput ?? "检查未通过，请查看运行记录。"}`,
   });
   const completion = await checkState(journal, reviewer, "task_completed");
+  journal.record.status =
+    accepted && completion.review.passed ? "completed" : "failed";
   if (!completion.review.passed) {
-    journal.record.status = "failed";
     await writeFiles(runDirectory, {
       "result.md": `本次验收未通过。\n\n${execution.finalOutput ?? "检查未通过，请查看运行记录。"}`,
     });
@@ -189,7 +183,7 @@ export async function executeAsset(
   journal.record.finishedAt = new Date().toISOString();
   journal.record.rsi = decideRsi(journal.record);
   await journal.trace({ type: "rsi_decided", decision: journal.record.rsi });
-  await journal.trace({ type: "run_finished", status: journal.record.status });
+  await trace({ type: "run_finished", status: journal.record.status });
   await journal.save();
   await journal.saveAsset(pkg, true);
   await journal.updateIndex();

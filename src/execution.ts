@@ -92,7 +92,17 @@ async function executeStep(
   };
   let currentMessage = message;
   for (let attempt = 0; attempt <= step.maxRevisions; attempt++) {
+    await trace({
+      type: "attempt_started",
+      stepId: step.id,
+      attempt: attempt + 1,
+    });
     const reply = await runAgent(definition, currentMessage);
+    await trace({
+      type: "attempt_completed",
+      stepId: step.id,
+      attempt: attempt + 1,
+    });
     const { review, reviewerId } = await reviewStep(step, attempt + 1, reply);
     await trace({
       type: "step_reviewed",

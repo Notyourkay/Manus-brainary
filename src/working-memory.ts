@@ -14,7 +14,7 @@ function object(properties: Record<string, unknown>) {
 }
 const partitionSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "manus-working-memory-v3",
+  $id: "manus-working-memory-v4",
   ...object({
     version: integer,
     task: object({
@@ -30,6 +30,9 @@ const partitionSchema = {
     }),
     generation: object({
       status: string,
+      pendingQuestion: string,
+      note: string,
+      evidenceRef: string,
       strategyId: string,
       summary: string,
       agentCount: integer,
@@ -90,7 +93,7 @@ export function projectWorkingMemory(record: RunRecord, directory: string) {
   const m = record.monitoring;
   const latest = m?.checks.at(-1);
   return {
-    version: 3,
+    version: record.generationState ? 4 : 3,
     task: {
       runId: record.runId,
       assetId: record.assetId,
@@ -103,11 +106,20 @@ export function projectWorkingMemory(record: RunRecord, directory: string) {
       error: record.error ?? "",
     },
     generation: {
-      status: record.bundle
-        ? record.mode === "generate"
-          ? "generated"
-          : "reused"
-        : "pending",
+      status:
+        record.generationState?.status ??
+        (record.bundle
+          ? record.mode === "generate"
+            ? "generated"
+            : "reused"
+          : "pending"),
+      ...(record.generationState
+        ? {
+            pendingQuestion: record.generationState.pendingQuestion,
+            note: record.generationState.note,
+            evidenceRef: record.generationState.evidenceRef,
+          }
+        : {}),
       strategyId: record.generationStrategy?.id ?? "",
       summary: record.bundle?.summary ?? "",
       agentCount: record.bundle?.agents.length ?? 0,
@@ -117,9 +129,10 @@ export function projectWorkingMemory(record: RunRecord, directory: string) {
     },
     execution: {
       status:
-        record.status === "running" && (record.execution || m?.activeStep)
+        m?.executionStatus ??
+        (record.status === "running" && (record.execution || m?.activeStep)
           ? "running"
-          : (record.execution?.status ?? "pending"),
+          : (record.execution?.status ?? "pending")),
       activeStep: m?.activeStep ?? "",
       attempt: m?.attempt ?? 0,
       completedSteps:

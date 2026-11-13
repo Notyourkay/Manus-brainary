@@ -86,8 +86,6 @@ export async function checkState(
   const id = `check-${m.checks.length + 1}`;
   const directory = `${journal.paths.runDirectory}/checks`;
   m.checkpoint = checkpoint;
-  m.activeStep = stepId;
-  m.attempt = attempt;
   if (output !== undefined) {
     m.outputRef = `${directory}/${id}-output.txt`;
     await writeFiles(directory, { [`${id}-output.txt`]: output });
@@ -165,6 +163,7 @@ task_completed：结合全部步骤、最终结果与独立 acceptance 判断完
   await journal.trace({ type: "metacognition_completed", check });
   if (!review.passed) {
     m.checkpoint = "check_failed";
+    if (checkpoint === "step_completed") m.executionStatus = "failed";
     await journal.trace({
       type: "check_failed",
       checkpoint,

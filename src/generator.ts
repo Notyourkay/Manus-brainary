@@ -63,7 +63,12 @@ export async function generateBundle(
   config: ManusConfig,
   runAgent: AgentRunner,
   strategy?: GeneratorStrategy,
+  onProgress?: (
+    status: "generating" | "awaiting_input",
+    question?: string,
+  ) => Promise<void>,
 ): Promise<GenerationResult> {
+  await onProgress?.("generating");
   const reply = await runAgent(
     {
       id: "manus-generator",
@@ -87,7 +92,10 @@ steps 顺序执行，inputFrom 只引用前置步骤，通常 1—2 步，最后
     },
     JSON.stringify({ request, context }),
   );
-  return parseGeneration(reply.text, context, config);
+  const generated = parseGeneration(reply.text, context, config);
+  if (generated.status === "clarify")
+    await onProgress?.("awaiting_input", generated.question);
+  return generated;
 }
 
 export function parseGeneration(

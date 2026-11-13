@@ -92,3 +92,16 @@
 - [x] 更新手册和证据，完成 lint/typecheck/test/package，提交推送 codex/v2-rsi，停止等待人工验收。
 
 人工契约 V2-H8：只运行 manus.poa 并输入一次任务即可在有证据时进入一轮 RSI；rsi 决定能定位检查与实验目录。八个对照都显示 evaluation 跳过，不生成子周期。无信号成功任务不复盘；自动周期失败不改变原任务验收。手动复盘仍可从同一入口使用。
+
+## 任务 9：生成阶段与执行状态的即时维护
+
+文件：src/monitoring.ts、contracts.ts、working-memory.ts、records.ts、generate.ts、generator.ts、execution.ts、run.ts、metacognition.ts、rsi/evaluation.ts；tests/state-lifecycle.test.ts；scripts/check-run.mjs；现有 V2 设计与手册。
+
+- [x] 扩展 generationState 与 executionStatus，保持六区、单作用域及旧快照读取；明确终态和待澄清清理规则。
+- [x] 增加 setGenerationState(status,note,pendingQuestion) 及生成结果观察回调，调用前/澄清返回后/ready 返回后及时写入；生成异常标失败，执行异常保留生成/复用状态。
+- [x] executeBundle 在步骤、尝试和输出节点发事件；RunJournal.observeExecution 实际保存并读回 WM。元认知不再负责首次设置执行指针；步骤终止与任务结束清理当前指针。
+- [x] 通过真实 RunJournal、文件读写及 WM SDK 校验/读回测试状态链，模型和宿主传输仅在测试边界替换；断言调用 Agent/等待补充之前状态已写入，重试及失败不残留旧指针。
+- [x] 真实 TUI 验证澄清等待→补充→完成、新会话独立包重跑；对现有 RSI evaluate 的内外层路径做真实模型/工具联调，保存状态证据。
+- [x] 完成 lint、typecheck、test、package 与证据核查，更新当前手册，停在人工验收；不合并 main。
+
+人工契约 V2-H9：等待补充时 generation.awaiting_input 与 pendingQuestion 可读；补充后清空，完成时为 generated；调用每个步骤和重试 Agent 前，WM 已显示对应 activeStep/attempt/running。步骤结束及失败清理当前指针，终态与 record 一致。独立包和 RSI 内层保持 reused，外层完整经历理解/生成/完成，调用数不因状态填充增加。操作与证据集中在 phase-2.md 第 11 节。

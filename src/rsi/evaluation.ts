@@ -54,6 +54,7 @@ export async function evaluate(options: {
         pkg.asset.config,
         createAgentRunner(pkg.asset.config, (event) => journal.trace(event)),
         strategy,
+        (status, question) => journal.observeGeneration(status, question),
       );
       if (
         generated.status !== "ready" ||
@@ -84,12 +85,7 @@ export async function evaluate(options: {
         originalInput: test.input,
         verification: [],
       };
-      journal.record.method = pkg.asset.method;
-      journal.record.bundle = pkg.asset.bundle;
-      await journal.trace({
-        type: "bundle_generated",
-        bundle: pkg.asset.bundle,
-      });
+      await journal.completeGeneration(pkg.asset.method, pkg.asset.bundle);
     }
     pkg = { ...pkg, resources: frozen.resources };
     pkg.asset.dependencies = {

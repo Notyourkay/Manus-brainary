@@ -1,6 +1,28 @@
 import type { Review } from "./contracts.js";
 
 export type Checkpoint = "plan_completed" | "step_completed" | "task_completed";
+export interface GenerationState {
+  status:
+    | "pending"
+    | "understanding"
+    | "awaiting_input"
+    | "generating"
+    | "generated"
+    | "failed"
+    | "reused";
+  pendingQuestion: string;
+  note: string;
+  evidenceRef: string;
+}
+export type ExecutionStatus =
+  | "pending"
+  | "running"
+  | "checking"
+  | "retrying"
+  | "between_steps"
+  | "completed"
+  | "failed"
+  | "error";
 export interface CognitiveReview extends Review {
   coverage: {
     goal: string;
@@ -26,6 +48,7 @@ export interface CognitiveCheck {
   review: CognitiveReview;
 }
 export interface Monitoring {
+  executionStatus?: ExecutionStatus;
   checkpoint: Checkpoint | "check_failed" | "pending";
   activeStep: string;
   attempt: number;
@@ -54,6 +77,7 @@ export interface RsiDecision {
 
 export function emptyMonitoring(): Monitoring {
   return {
+    executionStatus: "pending",
     checkpoint: "pending",
     activeStep: "",
     attempt: 0,

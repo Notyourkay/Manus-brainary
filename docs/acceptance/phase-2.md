@@ -1,6 +1,6 @@
 # Manus V2 人工验收手册
 
-更新：2026-11-13。开发分支 `codex/v2-rsi`。本手册对应 V2-H1—H8，记录操作、预期和实际证据；人工签收由用户完成。
+更新：2026-11-13。开发分支 `codex/v2-rsi`。本手册对应 V2-H1—H9，记录操作、预期和实际证据；人工签收由用户完成。
 
 ## 1. 展示内容
 
@@ -200,10 +200,11 @@ node scripts/check-rsi.mjs .local/v2-unified-entry-20261113/artifacts/manus/rsi/
 | V2-H6 | 构建只有一个 Manus 应用包；同一入口可完成生成执行和内部 RSI；task.poa 直接重跑 | pending |
 | V2-H7 | 六区 WM、四类更新节点、检查读回与证据引用、实际纠偏 | pending |
 | V2-H8 | 自动一轮、无信号跳过、评估不递归、来源 WM 恢复、主动复盘保留 | pending |
+| V2-H9 | 澄清问题的保存与清理、步骤/重试前即时更新、终态一致、重跑和对照兼容 | pending |
 
 本分支完成后等待用户人工验收，不自动合并 main。
 
-## 10. WM 与自动 RSI 验收（本次调整）
+## 10. WM 分区与自动 RSI 验收（V2-H7—H8）
 
 运行正常订单请求后查看 runs/<id>/wm-snapshot.json：task/generation/execution/metacognition/evidence/rsi 六区分别显示状态与引用（每区 entries[0].value），不再有 record 字符串。完整过程查看 trace.jsonl、tool-calls.jsonl、metacognition.json 和 checks/。检查输入快照来自 WM read_data；检查输出包括 coverage、progress、problems，证据引用可打开。
 
@@ -244,3 +245,62 @@ node scripts/check-run.mjs .local/v2-wm-replay-20261113/artifacts/manus/runs/116
 ```
 
 本次 lint、typecheck、47 个自动测试、package 全部通过。校验摘要与最终构建哈希保存在 `.local/v2-wm-correction-20261113/verification.json`。自动测试同时验证无信号跳过、评估隔离、一个来源不重复启动周期、自动周期失败时保留原任务结果。代码推送 `codex/v2-rsi`，等待用户人工签收。
+
+## 11. WM 阶段维护验收（V2-H9）
+
+本次保持六区、一个 PoA 作用域和现有证据文件。WM 版本为 4，生成依据由程序根据实际事件写入，未增加模型调用。RSI 触发、候选评估和采用规则沿用第 4、10 节。
+
+### 操作与预期
+
+1. 按第 2 节构建，在 TUI 运行 `dist/manus.poa`，选择新任务，输入“请核对我的订单结算并生成报告”，暂不提供材料。出现补充询问时，在另一个终端进入 Brainary 的启动目录，用 `ls -td artifacts/manus/runs/* | head -n 1` 找到最新运行目录。将下方占位符替换为该路径，查看本次运行的 WM：
+
+   ```bash
+   node --input-type=module - <本次运行目录> <<'NODE'
+   import {readFileSync} from 'node:fs';
+   const w=JSON.parse(readFileSync(process.argv[2]+'/wm-snapshot.json','utf8'));
+   console.log({task:w.task.entries[0].value.status,generation:w.generation.entries[0].value,execution:w.execution.entries[0].value});
+   NODE
+   ```
+
+   `generation.status=awaiting_input`，`pendingQuestion` 为当前询问。回复 `/Users/notyourkay/Manus-brainary/examples/orders-a.csv` 后，已解决的问题立即清空；生成完成后为 `generated`，`bundleRef` 指向实际方案。理解和生成阶段分别为 `understanding`、`generating`，不表示模型内部推理阶段。
+
+2. 执行中重复上面的查看命令。步骤开始即 `activeStep` 为当前步骤、`attempt=0`；调用任务 Agent 前为 `attempt=1/status=running`。输出后为 `checking`，准备重试时为 `retrying`，第二次调用前已经是 `attempt=2/status=running`，`outputRef` 清空。短暂阶段可从现有轨迹核对：
+
+   ```bash
+   node --input-type=module - <本次运行目录> <<'NODE'
+   import {readFileSync} from 'node:fs';
+   const events=readFileSync(process.argv[2]+'/trace.jsonl','utf8').trim().split('\n').map(JSON.parse);
+   console.table(events.filter(e=>e.type==='wm_state_updated').map(e=>({cause:e.cause,generation:e.generation.status,question:e.generation.pendingQuestion,execution:e.execution.status,step:e.execution.activeStep,attempt:e.execution.attempt})));
+   NODE
+   ```
+
+   `wm_state_updated` 保存 SDK 实际读回摘要，事件在相应 `agent_requested` 前。步骤结束清空当前指针，历史尝试在 `execution.json` 和 `checks/`；完整回执仍在 `tool-calls.jsonl`。
+
+3. 最终检查期间，`task.status=running`、`execution.status=checking`，无活动步骤。完成或失败后，`execution.status` 与 `record.status` 相同，`activeStep` 为空、`attempt=0`、`outputRef` 为空。查看最后一个 `checks/*-wm.json` 可核对检查进行时的状态，最终 `wm-snapshot.json` 可核对终态。生成阶段异常为 `generation.status=failed` 并清空问题；生成完成后的执行异常保持 `generated`，复用资产执行异常保持 `reused`。
+
+4. 按第 5 节将本轮新导出的 `task.poa` 复制到新目录，在新 Brainary 会话直接运行。全程 `generation.status=reused`，无输入询问、无生成调用。用 `check-run.mjs <重跑目录> <本次生成目录>` 验证 Agent 定义相同、实例与运行 ID 不同、业务和 WM 记录一致。
+
+5. 重试、最终失败和 RSI 内外层状态可复核下表的真实证据。需重做这三条路径时，在 `.local/v2-wm-timing-20261113/evaluation` 目录启动 Brainary，执行 `/poa fg /Users/notyourkay/Manus-brainary/.local/v2-wm-timing-20261113/state-evaluation-check.poa`。该本地联调驱动直接调用现有 `evaluate`，依次运行：保留一次重试的内层资产、将测试副本 `maxRevisions=0` 的失败用例、正常外层生成。原来源资产不变；驱动源码保存在同根目录的 `evaluation-driver.ts`，本地包不属于产品入口。检查输出的 `state-evaluations.json` 中新运行路径，内层始终 `reused`，外层经历 `understanding→generating→generated`，三者 `rsi.status=skipped`。这是状态链路验证；完整候选选择的既有证据见第 10 节。
+
+### 本轮实测证据
+
+根目录：`/Users/notyourkay/Manus-brainary/.local/v2-wm-timing-20261113`。Brainary/SDK `0.2.0-rc`，模型 `gpt-5.6-sol/custom`，执行器 `manus-executor-v2.2`。以下均为修正最终检查时序后的构建实际运行。
+
+| 验证项 | 运行目录（相对证据根目录） | 实际结果 |
+| --- | --- | --- |
+| 询问、补充、生成与执行 | artifacts/manus/runs/270e847a-011f-4774-b6da-d396a8797386 | 等待时问题可读，回答后清空；generated；13/13，6 次 Agent 调用（含两次生成），2 次工具调用 |
+| 新会话独立任务包 | replay/artifacts/manus/runs/4b3054cb-bc92-4384-bf3e-47e9416a1ff3 | reused；13/13，0 次生成、4 次总 Agent 调用、2 次工具调用；定义相同，新实例 |
+| RSI 内层重试 | evaluation/artifacts/manus/runs/f3789216-10e8-4162-899c-c3d40fd06500 | reused；调用前依次为 attempt=1、2；13/13，6 次 Agent 调用、2 次工具调用 |
+| RSI 内层最终失败 | evaluation/artifacts/manus/runs/0abe65df-bfbf-4763-a1f6-64010f007a0e | 测试副本禁止重试，真实失败；WM/record 同为 failed，指针清空；1/4，4 次 Agent 调用、0 次工具调用 |
+| RSI 外层生成执行 | evaluation/artifacts/manus/runs/7374ea1a-ee8a-40b8-9c07-0eeab6ef4c9a | understanding→generating→generated；13/13，5 次 Agent 调用、2 次工具调用 |
+
+等待时实际读取的 record 与 WM 保存在 `waiting-evidence-final.json`，并记录回答后的空问题状态。`verification.json` 汇总上述运行、最终检查的 running/checking 状态、调用数、通过数及构建哈希。核验覆盖六区快照与真实 record 投影一致、调用前状态顺序、失败终态、重跑定义与实例；调用总数等于生成次数＋真实执行尝试＋原有检查次数。
+
+```bash
+cd /Users/notyourkay/Manus-brainary
+node .local/v2-wm-timing-20261113/verify-state.mjs
+```
+
+预期 `verified: true`。其中四个成功用例均经过 `scripts/check-run.mjs` 核查，失败用例按预期失败验收并核对 WM 与记录。`check-run` 本身用于成功任务，不对刻意失败的运行要求通过。证据文件保留在本机 `.local`；Git 中只更新现有设计、计划、验收手册及实现。
+
+lint、typecheck、50 个自动测试和 package 全部通过。新增测试使用真实 RunJournal、WM SDK 校验/读回和实际文件脚本，只替换模型与宿主传输边界；包括多步骤切换、尝试前持久化、生成失败和复用资产异常清理。人工契约 V2-H9 等待用户签收，不合并 main。

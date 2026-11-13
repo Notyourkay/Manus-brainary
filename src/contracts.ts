@@ -1,5 +1,5 @@
 import type { BrainaryTool, ModelSpec } from "@brainary/poa-sdk";
-import type { Monitoring, RsiDecision } from "./monitoring.js";
+import type { GenerationState, Monitoring, RsiDecision } from "./monitoring.js";
 
 import type {
   EvaluationTag,
@@ -141,6 +141,7 @@ export interface RuntimeConditions {
   tools: BrainaryTool[];
 }
 export interface RunRecord {
+  generationState?: GenerationState;
   monitoring?: Monitoring;
   rsi?: RsiDecision;
   version: 2;

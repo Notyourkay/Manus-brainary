@@ -47,6 +47,7 @@ export async function generateTask(request: string): Promise<void> {
         config,
         runAgent,
         strategy,
+        (status, question) => journal.observeGeneration(status, question),
       );
       if (generated.status === "ready") {
         const method = generated.method;
@@ -87,12 +88,7 @@ export async function generateTask(request: string): Promise<void> {
       generated.material ?? request,
     );
     await journal.setInput(input);
-    journal.record.bundle = bundle;
-    journal.record.conditions.tools = [
-      ...new Set(bundle.agents.flatMap((agent) => agent.tools)),
-    ];
-    await journal.trace({ type: "bundle_generated", bundle });
-    await journal.save();
+    await journal.completeGeneration(method, bundle);
     const asset: TaskAsset = {
       version: 2,
       generationStrategy: journal.record.generationStrategy,

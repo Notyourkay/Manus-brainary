@@ -89,21 +89,47 @@ src/rsi/contracts.ts 定义 RSI 数据；measurement.ts 从真实证据重新计
 
 ## 7. WM 分区、任务内纠偏与自动 RSI
 
-WM schema 版本为 3，使用 SDK 原生 Map 表达六个分区，每区 current 条目保存闭合对象；原生快照通过 `<分区>.entries[0].value` 查看，检查器读取的视图去掉 Map 包装。保留 RunRecord 格式版本 2，并增加可选 monitoring 和 rsi 字段，兼容历史记录。完整 record.json 不再编码进 WM。
+WM schema 当前版本为 4，使用 SDK 原生 Map 表达六个分区，每区 current 条目保存闭合对象；原生快照通过 `<分区>.entries[0].value` 查看，检查器读取的视图去掉 Map 包装。保留 RunRecord 格式版本 2，并增加可选 monitoring、rsi 和 generationState 字段，兼容历史记录。完整 record.json 不再编码进 WM。
 
 | 分区 | 关键状态及引用 |
 | --- | --- |
 | task | runId、assetId、模式、请求、目标、场景、任务状态、输入哈希 |
-| generation | 生成/复用状态、策略 ID、方案摘要、角色与步骤数、bundle/context 引用 |
+| generation | 生成阶段/复用状态、待澄清问题、程序依据与证据引用、策略 ID、方案摘要、角色与步骤数、bundle/context 引用 |
 | execution | 当前步骤与尝试、已通过步骤数、工具成功/失败次数、当前输出与执行记录引用 |
 | metacognition | 当前检查节点、检查数、失败数、纠偏数、最近目标覆盖/进展/问题摘要、完整检查引用 |
 | evidence | record、input、context、trace、tool-calls、report、acceptance 等文件引用；不存在的证据使用空引用 |
 | rsi | 触发状态、规则理由、来源检查记录、cycleId、实验目录及错误 |
 
-四类更新节点：方案就绪（plan_completed）、每次步骤输出（step_completed）、检查失败（check_failed）、任务结束（task_completed）。检查失败立即持久化失败状态，复用该次检查结论，不为同一失败再增加一次模型调用。所有节点先写证据和 WM，再从 SDK read_data 读回，检查器通过 bundle、output、tools 等短标识引用证据，程序将其解析为实际文件路径；检查器使用读回状态及引用文件中的方案、领域约束、当前输出、工具回执和客观检查。每次保存 checks/<id>-wm.json、checks/<id>.json，metacognition.json 汇总结构化检查；trace.jsonl 保留完整模型输入输出，tool-calls.jsonl 保留完整回执。
+元认知维护四类检查节点：方案就绪（plan_completed）、每次步骤输出（step_completed）、检查失败（check_failed）、任务结束（task_completed）；执行开始与尝试开始的状态更新见第 8 节。检查失败立即持久化失败状态，复用该次检查结论，不为同一失败再增加一次模型调用。所有节点先写证据和 WM，再从 SDK read_data 读回，检查器通过 bundle、output、tools 等短标识引用证据，程序将其解析为实际文件路径；检查器使用读回状态及引用文件中的方案、领域约束、当前输出、工具回执和客观检查。每次保存 checks/<id>-wm.json、checks/<id>.json，metacognition.json 汇总结构化检查；trace.jsonl 保留完整模型输入输出，tool-calls.jsonl 保留完整回执。
 
 固定元认知 Agent 输出 passed、feedback、coverage（目标、planned/satisfied/missing、证据引用）、progress、problems（gap/failure/redundancy、依据）。方案节点检查覆盖与可执行性，不要求尚未产生的执行结果；方案缺口反馈作为本次执行指导传给任务 Agent，不改写可复用定义。每个步骤按自身验收条件检查，不要求中间步骤完成全部最终目标；失败按 maxRevisions 纠正至多一次，反馈传给原角色，仍失败则停止依赖步骤。任务结束检查全目标与客观结果；模型不能把失败的客观检查改成通过。任务完成检查不再重跑整项任务，交由后续 RSI 处理。
 
 自动触发规则是固定程序规则：仅 Manus 生成执行且已有完整订单输入/资产/上下文的结束任务具备自动评估条件；至少存在一次失败检查、任务内纠偏、最终客观失败，或检查器指出带证据引用的冗余步骤时触发。没有上述信号的成功任务跳过。文本任务保留元认知记录，但缺少本版的客观 RSI 评估套件，因此跳过并记录原因。RSI 评估运行不触发递归；每次正常 Manus 运行最多启动一次自动 cycle。独立 task.poa 保持直接重跑，记录建议与跳过原因，可由 Manus 主动复盘。
 
 自动周期在任务结果、任务包和触发决定落盘后启动。自动周期失败只更新 rsi 状态，保留原任务结果；成功或失败后重新写回来源运行的 WM，避免最终状态停留在最后一个对照用例。比较双方均使用同一固定检查流程，模型调用指标包含方案、步骤和任务完成检查。复盘 Agent 读取本次全部元认知记录及触发依据。主动复盘允许对无触发信号的任务做探索。
+
+## 8. WM 阶段状态维护
+
+继续使用一个 PoA 作用域中的六区 WM。RunRecord 增加可选 generationState，monitoring 增加 executionStatus；WM 使用版本 4 标识扩展字段，历史版本 3 保持可读。只记录可观察事件、简短程序依据及文件引用，不读取或导出 Agent 内部推理，不增加模型调用。
+
+### 外层生成
+
+| generation.status | 写入时机 | pendingQuestion |
+| --- | --- | --- |
+| pending | 新生成运行初始化 | 空 |
+| understanding | 接收请求/补充，准备场景上下文 | 空 |
+| generating | 调用生成 Agent 之前 | 空 |
+| awaiting_input | 生成结果为 clarify，调用 ask 之前 | 当前问题 |
+| generated | ready 结果通过现有契约，方法和方案写入记录 | 空 |
+| failed | 生成阶段异常结束 | 空；原问题保留在轨迹 |
+| reused | 从已有包/内层对照资产初始化 | 空 |
+
+note 由程序根据实际事件写简短说明，evidenceRef 指向现有 trace.jsonl 或 bundle.json。一次生成模型调用仍同时承担任务理解与方案生成：understanding 表示应用准备请求和上下文，generating 表示该调用在进行，不声称获取模型内部阶段。生成完成后的执行异常保持 generated；已有包执行异常保持 reused。RSI 外层通过相同生成状态接口维护，内层保持 reused。
+
+### 内层执行
+
+RunJournal.observeExecution 接收执行器的可观察事件，写运行记录、WM 并读回后才进入下一动作。步骤开始设 running/activeStep/attempt=0；每次尝试开始设 running/当前 step/从 1 开始的 attempt，并清空上一尝试的 outputRef；任务 Agent 返回后设 checking；检查失败将状态设 failed，准备重试时设 retrying；新尝试开始立即显示新的 attempt。步骤通过后设 between_steps，清空 activeStep/attempt/outputRef；步骤最终失败设 failed 并同样清空当前指针，具体失败位置通过 execution.json 和 checks 定位。所有步骤退出后，最终验收期间设 checking 且无活动步骤，record.status 保持 running，直到最终检查返回后才标记终态；任务结束后状态与 record.status 一致，异常退出为 error。
+
+元认知继续在原有四类节点检查，只维护检查状态和输出证据，不再延迟写入 activeStep/attempt。阶段变化将 SDK 实际读回的 generation/execution 摘要追加到现有 trace.jsonl（wm_state_updated），不新增逐工具调用监控或额外快照文件。最终 wm-snapshot.json 保持完整六区读回。
+
+本轮只修正状态时序，不修改 RSI 触发阈值、问题归因、候选评估及采用规则。

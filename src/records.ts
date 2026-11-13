@@ -1,8 +1,11 @@
 import { Kind, PoA } from "@brainary/poa-sdk";
 import type {
+  ExecutionStep,
+  GeneratedBundle,
   ManusConfig,
   RunInput,
   RunRecord,
+  StepRecord,
   TaskAsset,
   TaskMethod,
   TaskPackage,
@@ -10,7 +13,11 @@ import type {
   Verification,
 } from "./contracts.js";
 import { runNode, writeFiles } from "./files.js";
-import { emptyMonitoring, type Monitoring } from "./monitoring.js";
+import {
+  emptyMonitoring,
+  type GenerationState,
+  type Monitoring,
+} from "./monitoring.js";
 import {
   memorySchema,
   projectWorkingMemory,
@@ -21,7 +28,7 @@ import {
 } from "./working-memory.js";
 
 export const GENERATOR_VERSION = "manus-generator-v2.0";
-export const EXECUTOR_VERSION = "manus-executor-v2.1";
+export const EXECUTOR_VERSION = "manus-executor-v2.2";
 export interface RunPaths {
   runId: string;
   assetId: string;
@@ -61,6 +68,14 @@ console.log(JSON.stringify({
     const record: RunRecord & { monitoring: Monitoring } = {
       version: 2,
       monitoring: emptyMonitoring(),
+      generationState: {
+        status: asset ? "reused" : "pending",
+        pendingQuestion: "",
+        note: asset ? "使用已有资产中的 Agent 定义与方案" : "等待接收生成请求",
+        evidenceRef: asset
+          ? `${paths.runDirectory}/bundle.json`
+          : `${paths.runDirectory}/trace.jsonl`,
+      },
       runId: paths.runId,
       assetId: paths.assetId,
       mode,
@@ -104,7 +119,119 @@ console.log(JSON.stringify({
       "request.json": JSON.stringify({ request }, null, 2),
     });
     await this.trace({ type: "task_received", request });
-    await this.save();
+    if (this.record.mode === "generate" && !this.record.bundle) {
+      await this.setGenerationState(
+        "understanding",
+        "已接收任务内容，准备上下文与生成策略",
+      );
+    } else await this.save();
+  }
+  async setGenerationState(
+    status: GenerationState["status"],
+    note: string,
+    pendingQuestion = "",
+  ): Promise<void> {
+    this.record.generationState = {
+      status,
+      note,
+      pendingQuestion,
+      evidenceRef: `${this.paths.runDirectory}/${status === "generated" || status === "reused" ? "bundle.json" : "trace.jsonl"}`,
+    };
+    await this.trace({
+      type: "generation_state_changed",
+      generation: this.record.generationState,
+    });
+    await this.saveState("generation_state_changed");
+  }
+  async observeGeneration(
+    status: "generating" | "awaiting_input",
+    question = "",
+  ): Promise<void> {
+    await this.setGenerationState(
+      status,
+      status === "generating"
+        ? "使用已选上下文和策略调用生成 Agent"
+        : "生成 Agent 返回需要用户补充的问题",
+      question,
+    );
+  }
+  async completeGeneration(
+    method: TaskMethod,
+    bundle: GeneratedBundle,
+  ): Promise<void> {
+    this.record.method = method;
+    this.record.bundle = bundle;
+    this.record.conditions.tools = [
+      ...new Set(bundle.agents.flatMap((agent) => agent.tools)),
+    ];
+    await this.trace({ type: "bundle_generated", bundle });
+    await this.setGenerationState(
+      "generated",
+      "方案已通过生成契约校验并写入运行记录",
+    );
+  }
+  async observeExecution(event: TraceEvent): Promise<void> {
+    const m = this.record.monitoring;
+    let changed = true;
+    switch (event.type) {
+      case "step_started":
+        m.executionStatus = "running";
+        m.activeStep = (event.step as ExecutionStep).id;
+        m.attempt = 0;
+        m.outputRef = "";
+        break;
+      case "attempt_started":
+        m.executionStatus = "running";
+        m.activeStep = event.stepId as string;
+        m.attempt = event.attempt as number;
+        m.outputRef = "";
+        break;
+      case "attempt_completed":
+        m.executionStatus = "checking";
+        break;
+      case "step_revision":
+        m.executionStatus = "retrying";
+        m.revisions++;
+        break;
+      case "step_completed":
+        m.executionStatus =
+          (event.step as StepRecord).status === "passed"
+            ? "between_steps"
+            : "failed";
+        this.clearActiveStep();
+        break;
+      case "execution_error":
+        m.executionStatus = "failed";
+        this.clearActiveStep();
+        break;
+      case "execution_verifying":
+        m.executionStatus = "checking";
+        this.clearActiveStep();
+        break;
+      case "run_finished":
+        m.executionStatus =
+          this.record.status === "completed" ? "completed" : "failed";
+        this.clearActiveStep();
+        break;
+      default:
+        changed = false;
+    }
+    await this.trace(event);
+    if (changed) await this.saveState(event.type);
+  }
+  private clearActiveStep(): void {
+    this.record.monitoring.activeStep = "";
+    this.record.monitoring.attempt = 0;
+    this.record.monitoring.outputRef = "";
+  }
+  private async saveState(cause: string): Promise<void> {
+    const wm = await this.save();
+    await this.trace({
+      type: "wm_state_updated",
+      cause,
+      generation: wm.generation,
+      execution: wm.execution,
+    });
   }
   async setInput(input: RunInput): Promise<void> {
     this.record.input = input;
@@ -133,7 +260,7 @@ import {appendFile} from "node:fs/promises";
 await appendFile(${JSON.stringify(`${this.paths.runDirectory}/trace.jsonl`)},${JSON.stringify(`${JSON.stringify(entry)}\n`)});
 `);
   }
-  async save(): Promise<void> {
+  async save(): Promise<WorkingMemory> {
     const files: Record<string, string> = {
       "record.json": JSON.stringify(this.record, null, 2),
     };
@@ -151,13 +278,13 @@ await appendFile(${JSON.stringify(`${this.paths.runDirectory}/trace.jsonl`)},${J
         projectWorkingMemory(this.record, this.paths.runDirectory),
       ),
     );
+    const snapshot = (await this.memory.read_data(
+      Kind.WM,
+    )) as unknown as StoredWorkingMemory;
     await writeFiles(this.paths.runDirectory, {
-      "wm-snapshot.json": JSON.stringify(
-        await this.memory.read_data(Kind.WM),
-        null,
-        2,
-      ),
+      "wm-snapshot.json": JSON.stringify(snapshot, null, 2),
     });
+    return readWorkingMemory(snapshot);
   }
   async readWorkingMemory(): Promise<WorkingMemory> {
     return readWorkingMemory(
@@ -212,8 +339,22 @@ await rebuildIndex(${JSON.stringify(this.paths.memoryRoot)}, [${JSON.stringify(`
     this.record.status = "error";
     this.record.error = String(error);
     this.record.finishedAt = new Date().toISOString();
+    if (
+      !["generated", "reused"].includes(
+        this.record.generationState?.status ?? "pending",
+      )
+    ) {
+      this.record.generationState = {
+        status: "failed",
+        pendingQuestion: "",
+        note: "生成流程未完成，异常见运行轨迹",
+        evidenceRef: `${this.paths.runDirectory}/trace.jsonl`,
+      };
+    }
+    this.record.monitoring.executionStatus = "error";
+    this.clearActiveStep();
     await this.trace({ type: "run_error", error: this.record.error });
-    await this.save();
+    await this.saveState("run_error");
   }
 }
 
