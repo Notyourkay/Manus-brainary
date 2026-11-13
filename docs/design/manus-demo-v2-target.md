@@ -30,15 +30,15 @@ PoA 是编排代码，Agent 定义是可复用配置，实例由 SDK 创建并�
 
 GeneratorStrategy：id、parentId、scenario、instructions、sourceRunIds、createdAt。固定的生成 JSON 契约、工具目录、领域引用和客观检查不受策略覆盖；instructions 只补充生成方法。基线策略可为空补充指令。
 
-TaskAsset 保持 V1 格式版本 2，新增可选 generationStrategy（本次所用策略完整快照）、lineage（parentAssetId、sourceRunIds、cycleId）。已有 V1 包仍可运行。内层候选使用新 assetId，原始文件与定义不覆盖。外层生成的新资产保存所用策略 ID 与内容。
+TaskAsset 保持 V1 格式版本 2，新增可选 generationStrategy（本次所用策略完整快照）、lineage（parentAssetId、sourceRunIds、cycleId）。已有 V1 包仍可运行。内层候选使用新 assetId。基线评估也使用保留原定义的独立副本，避免不同测试材料写回原资产；保留基线时选中的是这个定义不变的副本。两侧均保留 parentAssetId，原始文件与定义不覆盖。外层生成的新资产保存所用策略 ID 与内容。内层候选保留原始 generationStrategy 作为生成来源，后续改进由 lineage 指向本轮复盘；它与 learning/state.json 中当前生效的外层策略是两个用途。
 
 RunRecord 增加可选 evaluation（cycleId、target、arm、caseId）与 generationStrategy；mode 新增 evaluate。执行器版本记录实际执行版本；生成器版本及资产谱系分别保留。每个对照执行仍写 WM、request/input/context、trace、真实工具回执、报告和验收记录。
 
 ### 3.2 复盘与经验
 
-复盘 Agent 接收来源运行的任务、方案、步骤尝试、模型反馈、客观检查、工具回执和当前生成策略。返回 diagnosis、sourceRunIds、experiences（content、applicability）、innerBundle、strategyInstructions。模型返回在入口校验结构、来源引用、角色/步骤/工具/规则引用；角色和步骤沿用 V1 契约。
+复盘 Agent 接收来源运行的任务、方案、步骤尝试、模型反馈、客观检查、工具回执和当前生成策略。返回 diagnosis、sourceRunIds、experiences（content、applicability）、innerBundle、strategyInstructions。模型返回在入口校验结构、来源引用、角色/步骤/工具/规则引用；角色和步骤沿用 V1 契约。格式错误时携带具体错误修正一次，两份原文均保留；仍不符合契约则停止本轮。
 
-经验候选由程序附加 ID、版本、场景、来源运行、cycleId 和状态。候选保存在实验目录；只有对应实验存在被采用的改进，才发布到经验存储，附带验证用例和运行 ID。经验有效性仅指所列验证范围，不把模型总结本身视为普遍正确。
+经验候选由程序附加 ID、版本、场景、来源运行、cycleId 和状态。候选保存在实验目录；只有对应实验存在被采用的改进，才发布到经验存储，附带验证用例和运行 ID。经验的验证范围指包含该方法的候选整体在所列用例上通过且有收益；本版不声称通过消融验证了单条经验的独立因果作用。
 
 经历保存“发生了什么”，经验保存“适用条件下建议怎么做”。后续 Manus 按场景读取已发布经验，记录实际来源与版本；候选经验不参与日常召回。人工经验继续保留。RSI 对照的上下文在开始时冻结，双方使用相同领域、经验与经历；过程中新增的运行不混入本轮后续测试。
 
@@ -76,9 +76,9 @@ RunRecord 增加可选 evaluation（cycleId、target、arm、caseId）与 genera
 | artifacts/manus/assets/<assetId>/ | 新候选/生成资产及验证状态，保存策略与谱系 |
 | <memoryRoot>/learning/state.json | 按场景采用的策略与已发布经验；历史版本在各 cycle 中留存 |
 
-src/rsi/contracts.ts 定义 RSI 数据；proposal.ts 负责模型复盘边界；comparison.ts 实现确定性选择；evaluation.ts 复用生成与执行链路；cycle.ts 编排一次实验；store.ts 使用 SDK 读写应用数据。resources/learning.mjs 提供小型 JSON 经验/策略存储，供真实文件测试与 PoA 共用。src/rsi-main.ts 是独立入口。
+src/rsi/contracts.ts 定义 RSI 数据；measurement.ts 从真实证据重新计算指标；proposal.ts 负责模型复盘边界；comparison.ts 实现确定性选择；evaluation.ts 复用生成与执行链路；cycle.ts 编排一次实验；store.ts 使用 SDK 读写应用数据。resources/learning.mjs 提供小型 JSON 经验/策略存储，resources/evaluation.mjs 读取实际运行证据，供文件测试、离线核查与 PoA 共用。src/rsi-main.ts 是独立入口。
 
-沿用 MANUS_MEMORY_ROOT 共享经验与策略；默认根目录为 artifacts/manus。模型凭据与服务连接继续由 Brainary 配置提供。应用使用 WM 正式读写接口保存运行状态，不在 Manus 重建基础框架。
+沿用 MANUS_MEMORY_ROOT 共享经验与策略；默认根目录为 artifacts/manus。模型凭据与服务连接继续由 Brainary 配置提供。应用使用 WM 正式读写接口保存运行状态。0.2.0-rc 的 WM 声明属于本次 PoA 执行作用域，因此一轮 RSI 共用一次声明注册，顺序写入各次运行并各自导出 WM 读回副本。`agent_id` 不用于隔离声明；不在 Manus 重建基础框架。
 
 ## 6. 验证与交接
 
