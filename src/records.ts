@@ -11,8 +11,8 @@ import type {
 } from "./contracts.js";
 import { runNode, writeFiles } from "./files.js";
 
-export const GENERATOR_VERSION = "manus-generator-v1.3";
-export const EXECUTOR_VERSION = "manus-executor-v1.5";
+export const GENERATOR_VERSION = "manus-generator-v2.0";
+export const EXECUTOR_VERSION = "manus-executor-v2.0";
 const memorySchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "manus-run-v2",
@@ -86,15 +86,17 @@ console.log(JSON.stringify({
         tools: config.availableTools,
       },
       generatorVersion: asset?.generatorVersion ?? GENERATOR_VERSION,
-      executorVersion: asset?.executorVersion ?? EXECUTOR_VERSION,
+      executorVersion: EXECUTOR_VERSION,
+      ...(asset?.generationStrategy
+        ? { generationStrategy: asset.generationStrategy }
+        : {}),
     };
-    const memory = new PoA({ agent_id: paths.runId });
+    const memory = await runMemory();
     const journal = new RunJournal(paths, record, memory);
     await writeFiles(paths.runDirectory, {
       "record.json": JSON.stringify(record, null, 2),
     });
     await journal.trace({ type: "run_started", mode, method });
-    await memory.register_schema(Kind.WM, memorySchema);
     await journal.save();
     return journal;
   }
@@ -200,4 +202,14 @@ await rebuildIndex(${JSON.stringify(this.paths.memoryRoot)}, [${JSON.stringify(`
     await this.trace({ type: "run_error", error: this.record.error });
     await this.save();
   }
+}
+
+let workingMemory: PoA | undefined;
+async function runMemory(): Promise<PoA> {
+  if (workingMemory) return workingMemory;
+  // 0.2.0-rc 的 WM 作用域属于本次 PoA 执行，agent_id 不创建独立的声明空间。
+  const memory = new PoA({ agent_id: "manus-run-journal" });
+  await memory.register_schema(Kind.WM, memorySchema);
+  workingMemory = memory;
+  return memory;
 }

@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "inner": ["source", "orders-b"],
+  "outer": ["orders-b", "orders-c"],
+  "heldOutFromReflection": ["orders-c"],
+  "request": "请核对 {path} 的订单结算，排除取消订单，按整数分计算退款后净额，按客户汇总并落盘报告。"
+}

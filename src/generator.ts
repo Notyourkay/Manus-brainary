@@ -10,6 +10,8 @@ import type {
   TaskMethod,
 } from "./contracts.js";
 
+import type { GeneratorStrategy } from "./rsi/contracts.js";
+
 export type GenerationResult =
   | { status: "clarify"; question: string }
   | {
@@ -60,6 +62,7 @@ export async function generateBundle(
   context: TaskContext,
   config: ManusConfig,
   runAgent: AgentRunner,
+  strategy?: GeneratorStrategy,
 ): Promise<GenerationResult> {
   const reply = await runAgent(
     {
@@ -79,7 +82,8 @@ steps 顺序执行，inputFrom 只引用前置步骤，通常 1—2 步，最后
 所给 context 是候选资料；只采用与任务相关的内容。订单步骤的 knowledgeRefs 必须覆盖以下规则 ID：${JSON.stringify(context.domain?.rules.map((rule) => rule.id) ?? [])}。逐字复制 ID，不添加 domain.rules/ 等路径前缀；在 instruction 中说明运用。其他任务用空数组。
 订单角色持有 exec_command：使用消息中的 taskTools 命令 read 读取真实数据（运行时可提供快照，或由角色从新请求提取 CSV 路径传给 read）；按领域规则计算；用 write 真正落盘。不要生成工具代码或让生成器计算结果。
 订单报告字段只能是 rowCount、includedCount、cancelledCount、grossCents、refundCents、netCents、byCustomer（customer/netCents）、ruleRefs、sourceSha256，金额为整数分，sourceSha256 来自 read。最终答案展示报告内容与位置。
-人工经验和经历只用于执行方法参考，不把历史数值、路径和结果当成本次输入。`,
+人工经验和经历只用于执行方法参考，不把历史数值、路径和结果当成本次输入。
+以下是本场景已采用的生成策略，应用其中的方法改进，同时遵守上面的 JSON 契约、工具和领域规则：${strategy?.instructions ?? "标准生成策略"}`,
     },
     JSON.stringify({ request, context }),
   );

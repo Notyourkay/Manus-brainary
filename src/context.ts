@@ -28,7 +28,7 @@ export function selectContext(
       (item) => item.scenario === method.scenario,
     ),
     episodes,
-    selection: `按场景 ${method.scenario} 选择资料和人工经验；历史按场景及目标关键词匹配，最多取 3 条。`,
+    selection: `按场景 ${method.scenario} 选择资料、人工经验和已验证的自动经验；历史按场景及目标关键词匹配，最多取 3 条。`,
   };
 }
 export async function loadContext(options: {
@@ -45,9 +45,11 @@ export async function loadContext(options: {
 import {readFile} from "node:fs/promises";
 import {pathToFileURL} from "node:url";
 const {rebuildIndex, queryEpisodes} = await import(pathToFileURL(${JSON.stringify(`${options.runDirectory}/resources/memory.mjs`)}));
+const {loadLearning} = await import(pathToFileURL(${JSON.stringify(`${options.runDirectory}/resources/learning.mjs`)}));
 const root = ${JSON.stringify(options.memoryRoot)};
 const path = ${JSON.stringify(options.experienceFile)};
 console.log(JSON.stringify({
+  learned: (await loadLearning(root)).experiences,
   experiences: path ? JSON.parse(await readFile(path,"utf8")) : null,
   episodes: queryEpisodes(await rebuildIndex(root), ${JSON.stringify(options.method.scenario)}, ${JSON.stringify(options.method.objective)}, ${JSON.stringify(options.runId)})
 }));
@@ -59,7 +61,11 @@ console.log(JSON.stringify({
       : parseExperiences(loaded.experiences, options.experienceFile as string);
   return selectContext(
     options.method,
-    experiences,
+    [
+      ...new Map(
+        [...experiences, ...loaded.learned].map((item) => [item.id, item]),
+      ).values(),
+    ],
     loaded.episodes,
     options.domain,
   );

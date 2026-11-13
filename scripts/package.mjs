@@ -177,6 +177,19 @@ try {
   await mkdir(dist, { recursive: true });
   await writeFile(outputPath, archive);
   console.log(`Created ${relative(root, outputPath)}`);
+  const rsiManifest = { poa: { ...packageManifest.poa, name: "manus-rsi" } };
+  delete rsiManifest.poa.input_schema;
+  const rsiFiles = {
+    ...archiveFiles,
+    "main.js": new Uint8Array(await readFile(join(dist, "rsi.js"))),
+    "manifest.toml": new TextEncoder().encode(stringify(rsiManifest)),
+  };
+  delete rsiFiles["input_schema.json"];
+  await writeFile(
+    join(dist, "manus-rsi.poa"),
+    zipSync(rsiFiles, { level: 6, mtime: new Date(1980, 0, 1) }),
+  );
+  console.log("Created dist/manus-rsi.poa");
 } finally {
   await rm(temporaryPackage, { recursive: true, force: true });
 }

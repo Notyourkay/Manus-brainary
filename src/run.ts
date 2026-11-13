@@ -16,6 +16,7 @@ import { validateOrderRun } from "./validation.js";
 export async function executeAsset(
   pkg: TaskPackage,
   journal: RunJournal,
+  display = true,
 ): Promise<void> {
   const { asset } = pkg,
     { runDirectory } = journal.paths;
@@ -24,9 +25,9 @@ export async function executeAsset(
   const inputPath = `${runDirectory}/${asset.method.inputKind === "csv" ? "input.csv" : "input.txt"}`;
   const trace = async (event: TraceEvent) => {
     await journal.trace(event);
-    if (event.type === "step_started")
+    if (display && event.type === "step_started")
       notify(`开始步骤：${JSON.stringify(event.step)}`);
-    if (event.type === "step_revision")
+    if (display && event.type === "step_revision")
       notify(`修订步骤 ${event.stepId}：${event.feedback}`);
   };
   const execution = await executeBundle(
@@ -54,9 +55,10 @@ export async function executeAsset(
       toolScript: `${runDirectory}/resources/order-tools.mjs`,
     }),
     async (step) => {
-      notify(
-        `步骤 ${step.stepId}：${step.status === "passed" ? "模型检查通过" : "模型检查未通过"}`,
-      );
+      if (display)
+        notify(
+          `步骤 ${step.stepId}：${step.status === "passed" ? "模型检查通过" : "模型检查未通过"}`,
+        );
       await trace({ type: "step_completed", step });
       journal.record.execution ??= {
         status: "failed",
@@ -138,6 +140,7 @@ export async function executeAsset(
   await journal.save();
   await journal.saveAsset(pkg, true);
   await journal.updateIndex();
+  if (!display) return;
   text(execution.finalOutput ?? "任务检查未通过。");
   if (evidence.report !== null) text(evidence.report);
   text({

@@ -9,6 +9,8 @@ import { writeFiles } from "./files.js";
 import { type GenerationResult, generateBundle } from "./generator.js";
 import { askForTask, captureInput, contextHint, readRequest } from "./input.js";
 import { RunJournal } from "./records.js";
+import { defaultStrategy } from "./rsi/contracts.js";
+import { loadLearning } from "./rsi/store.js";
 import { executeAsset } from "./run.js";
 import { exportTaskPackage } from "./task-package.js";
 
@@ -29,8 +31,22 @@ async function main(): Promise<void> {
       await journal.setRequest(request);
       const hint = contextHint(request);
       const candidates = await loadContext({ method: hint, ...journal.paths });
+      const learning = await loadLearning(
+        journal.paths.memoryRoot,
+        journal.paths.runDirectory,
+      );
+      const strategy =
+        learning.strategies[hint.scenario] ?? defaultStrategy(hint.scenario);
+      journal.record.generationStrategy = strategy;
+      await journal.trace({ type: "strategy_selected", strategy });
       notify("Manus 正在理解任务并生成可复用 Agent……");
-      generated = await generateBundle(request, candidates, config, runAgent);
+      generated = await generateBundle(
+        request,
+        candidates,
+        config,
+        runAgent,
+        strategy,
+      );
       if (generated.status === "ready") {
         const method = generated.method;
         context = selectContext(
@@ -78,6 +94,7 @@ async function main(): Promise<void> {
     await journal.save();
     const asset: TaskAsset = {
       version: 2,
+      generationStrategy: journal.record.generationStrategy,
       assetId: journal.record.assetId,
       createdAt: new Date().toISOString(),
       method,

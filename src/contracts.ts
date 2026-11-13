@@ -1,5 +1,11 @@
 import type { BrainaryTool, ModelSpec } from "@brainary/poa-sdk";
 
+import type {
+  EvaluationTag,
+  ExperienceProvenance,
+  GeneratorStrategy,
+} from "./rsi/contracts.js";
+
 export interface ManusConfig {
   model: ModelSpec;
   availableTools: BrainaryTool[];
@@ -31,6 +37,8 @@ export interface DomainKnowledge {
   methods: string[];
 }
 export interface Experience {
+  applicability?: string;
+  provenance?: ExperienceProvenance;
   id: string;
   version: string;
   scenario: TaskMethod["scenario"];
@@ -135,7 +143,9 @@ export interface RunRecord {
   version: 2;
   runId: string;
   assetId: string;
-  mode: "generate" | "new" | "replay";
+  mode: "generate" | "new" | "replay" | "evaluate";
+  evaluation?: EvaluationTag;
+  generationStrategy?: GeneratorStrategy;
   status: "running" | "completed" | "failed" | "error";
   startedAt: string;
   finishedAt: string | null;
@@ -162,6 +172,8 @@ export interface Dependencies {
   resources: string[];
 }
 export interface TaskAsset {
+  generationStrategy?: GeneratorStrategy;
+  lineage?: { parentAssetId: string; sourceRunIds: string[]; cycleId: string };
   version: 2;
   assetId: string;
   createdAt: string;
