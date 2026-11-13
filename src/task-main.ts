@@ -1,38 +1,23 @@
-import { notify, text } from "@brainary/poa-sdk";
+import { notify } from "@brainary/poa-sdk";
 import { loadContext } from "./context.js";
-import type { TaskEntryMode, TaskPackage } from "./contracts.js";
+import type { TaskPackage } from "./contracts.js";
 import { writeFiles } from "./files.js";
-import { captureInput, readPackageInput } from "./input.js";
 import { RunJournal } from "./records.js";
 import { executeAsset } from "./run.js";
 
 declare const MANUS_PACKAGE: TaskPackage;
-declare const MANUS_ENTRY_MODE: TaskEntryMode;
 async function main(pkg: TaskPackage): Promise<void> {
   const { asset } = pkg;
-  const request = await readPackageInput(MANUS_ENTRY_MODE, asset.method);
-  if (!request) {
-    text(
-      "未提交新任务，本次已结束。原任务未执行；可在 TUI 用 /poa fg 再次打开新任务入口。",
-    );
-    return;
-  }
   const journal = await RunJournal.open(
     asset.method,
     asset.config,
-    request.mode,
+    "replay",
     asset,
   );
   try {
     await writeFiles(`${journal.paths.runDirectory}/resources`, pkg.resources);
-    await journal.setRequest(
-      request.mode === "replay" ? pkg.originalRequest : request.request,
-    );
-    const input =
-      request.mode === "replay"
-        ? pkg.originalInput
-        : await captureInput("text", request.request);
-    await journal.setInput(input);
+    await journal.setRequest(pkg.originalRequest);
+    await journal.setInput(pkg.originalInput);
     const context = await loadContext({
       method: asset.method,
       ...journal.paths,
@@ -49,7 +34,7 @@ async function main(pkg: TaskPackage): Promise<void> {
     await journal.trace({
       type: "asset_reused",
       assetId: asset.assetId,
-      mode: request.mode,
+      mode: "replay",
     });
     notify(
       `复用资产 ${asset.assetId}，直接执行保存的方法。历史经历 ${context.episodes.length} 条。`,

@@ -10,7 +10,7 @@ import { type GenerationResult, generateBundle } from "./generator.js";
 import { askForTask, captureInput, contextHint, readRequest } from "./input.js";
 import { RunJournal } from "./records.js";
 import { executeAsset } from "./run.js";
-import { exportTaskPackages } from "./task-package.js";
+import { exportTaskPackage } from "./task-package.js";
 
 async function main(): Promise<void> {
   let request = await readRequest();
@@ -105,29 +105,26 @@ async function main(): Promise<void> {
       verification: [],
     };
     await journal.saveAsset(pkg);
-    const taskPackages = await exportTaskPackages(
+    const taskPackage = await exportTaskPackage(
       pkg,
       taskProgram,
       journal.paths.assetDirectory,
     );
     await journal.trace({
       type: "asset_exported",
-      taskPackage: taskPackages.replay,
-      newTaskPackage: taskPackages.newTask,
+      taskPackage,
       status: "generated",
     });
     text(
       `${bundle.summary}\n角色：${bundle.agents.map((agent) => agent.name).join("、")}\n步骤：${bundle.steps.map((step) => step.id).join(" → ")}`,
     );
-    text(
-      `任务包：${taskPackages.replay}\n新任务入口：${taskPackages.newTask}\n状态：已生成，尚待本次执行和客观检查。`,
-    );
+    text(`任务包：${taskPackage}\n状态：已生成，尚待本次执行和客观检查。`);
     await executeAsset(pkg, journal);
     pkg.verification = [journal.verification()];
-    await exportTaskPackages(pkg, taskProgram, journal.paths.assetDirectory);
-    await journal.trace({ type: "package_evidence_updated", taskPackages });
+    await exportTaskPackage(pkg, taskProgram, journal.paths.assetDirectory);
+    await journal.trace({ type: "package_evidence_updated", taskPackage });
     text(
-      `任务包已附本次验证证据。\n重跑原任务：/poa fg ${taskPackages.replay}\n处理同类新任务：/poa fg ${taskPackages.newTask}\n新任务入口会显示用途，直接输入自然语言即可。`,
+      `任务包已附本次验证证据：${taskPackage}\n新会话直接运行即可使用包内原请求与资料快照重跑任务。\n运行命令：/poa fg ${taskPackage}`,
     );
   } catch (error) {
     await journal.fail(error);
